@@ -1,0 +1,95 @@
+{
+ "Fighter": {
+  "file": "Fighter.json",
+  "label": "FighterIdleF",
+  "frames": 528,
+  "viewBox": "-80 -110.1 170 145.1"
+ },
+ "Mage": {
+  "file": "Mage.json",
+  "label": "MageIdleF",
+  "frames": 362,
+  "viewBox": "-80 -106 170 141"
+ },
+ "Hunter": {
+  "file": "Hunter.json",
+  "label": "HunterIdleF",
+  "frames": 669,
+  "viewBox": "-80 -106 170 141"
+ },
+ "Druid": {
+  "file": "Druid.json",
+  "label": "DruidIdleF",
+  "frames": 617,
+  "viewBox": "-80 -106 170 141"
+ },
+ "Tank": {
+  "file": "Tank.json",
+  "label": "TankIdleF",
+  "frames": 505,
+  "viewBox": "-80 -106 170 141"
+ },
+ "Medic": {
+  "file": "Medic.json",
+  "label": "HealerIdleF",
+  "frames": 729,
+  "viewBox": "-80 -106 170 141"
+ },
+ "Monk": {
+  "file": "Monk.json",
+  "label": "MonkIdleF",
+  "frames": 629,
+  "viewBox": "-80 -110.6 170 145.6"
+ },
+ "Thief": {
+  "file": "Thief.json",
+  "label": "ThiefIdleF",
+  "frames": 617,
+  "viewBox": "-80 -106 170 141"
+ },
+ "Jester": {
+  "file": "Jester.json",
+  "label": "JesterIdleF",
+  "frames": 426,
+  "viewBox": "-80 -130.2 170 165.2"
+ },
+ "Psychic": {
+  "file": "Psychic.json",
+  "label": "PsychicIdleF",
+  "frames": 876,
+  "viewBox": "-80 -106 170 141"
+ },
+ "Necromancer": {
+  "file": "Necromancer.json",
+  "label": "NecromancerIdleF",
+  "frames": 805,
+  "viewBox": "-80 -106 170 141"
+ },
+ "Tinkerer": {
+  "file": "Tinkerer.json",
+  "label": "TinkererIdleF",
+  "frames": 579,
+  "viewBox": "-80 -106 170 141"
+ },
+ "Butcher": {
+  "file": "Butcher.json",
+  "label": "ButcherIdleNoWeapon",
+  "frames": 81,
+  "viewBox": "-80 -106 170 141"
+ },
+ "Colorless": {
+  "file": "Colorless.json",
+  "label": "idleF",
+  "frames": 180,
+  "viewBox": "-80 -106 170 141"
+ },
+ "_behaviours": {
+  "file": "_behaviours.json",
+  "names": [
+   "lookingaroundF",
+   "scratchearF",
+   "tailwagF",
+   "sitAndSmileF"
+  ]
+ }
+}

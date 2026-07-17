@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mewgenics Wiki Tools</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; background: #f7f3ec; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 2rem; }
+  .container { max-width: 640px; width: 100%; }
+  h1 { font-size: 28px; font-weight: 700; margin-bottom: 6px; }
+  .subtitle { color: #666; font-size: 14px; margin-bottom: 2.5rem; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .card { background: #fff; border: 1px solid #ddd; border-radius: 12px; padding: 1.5rem; text-decoration: none; color: inherit; transition: box-shadow .15s, transform .15s; display: block; }
+  .card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.1); transform: translateY(-2px); }
+  .card-icon { font-size: 2rem; margin-bottom: 10px; }
+  .card h2 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .card p { font-size: 13px; color: #666; line-height: 1.5; }
+  .card .meta { margin-top: 10px; font-size: 11px; color: #aaa; }
+  footer { margin-top: 2rem; text-align: center; font-size: 12px; color: #aaa; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🐱 Mewgenics Wiki Tools</h1>
+  <p class="subtitle">Reference tools for Mewgenics — data sourced from <a href="https://mewgenics.wiki" target="_blank">mewgenics.wiki</a></p>
+  <div class="cards">
+    <a class="card" href="abilities.html">
+      <div class="card-icon">⚔️</div>
+      <h2>Abilities by Class</h2>
+      <p>All active abilities and passives for every collar class. Searchable, sortable, with icons and inline status effect images.</p>
+      <div class="meta">14 classes · 800+ abilities · live API data</div>
+    </a>
+    <a class="card" href="mutations.html">
+      <div class="card-icon">🧬</div>
+      <h2>Mutations by Slot</h2>
+      <p>All named mutations and birth defects organized by body part slot. Sortable with slot badges and CSV export.</p>
+      <div class="meta">9 slots · 379 mutations · static data</div>
+    </a>
+    <a class="card" href="items.html">
+      <div class="card-icon">🎒</div>
+      <h2>Items</h2>
+      <p>Every item by slot, rarity, and set. Filter by slot, rarity, cursed, and consumable. Searchable with stats, icons, and CSV export.</p>
+      <div class="meta">5 slots · 1000+ items · live API data</div>
+    </a>
+    <a class="card" href="kittenshare.html">
+      <div class="card-icon">🐾</div>
+      <h2>KittenShare</h2>
+      <p>Open your Mewgenics save file, browse cards for every kitten with real puppet portraits, and share any kitten via a link.</p>
+      <div class="meta">reads .sav locally · puppet SVGs from game art · shareable links</div>
+    </a>
+    <a class="card" href="elements.html">
+      <div class="card-icon">🔮</div>
+      <h2>Element Interactions</h2>
+      <p>How the elements react with each other and their tiles — Water puts out Fire, Cold freezes Wet, Electric conducts. Plus the elemental statuses.</p>
+      <div class="meta">11 elements · reactions + statuses · from game files</div>
+    </a>
+  </div>
+  <footer>Built with Claude · Data from mewgenics.wiki</footer>
+</div>
+</body>
+</html>

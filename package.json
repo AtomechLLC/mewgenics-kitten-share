@@ -1,0 +1,12 @@
+{
+  "name": "mewgenics-wiki",
+  "version": "1.0.0",
+  "description": "Local reference tools for Mewgenics — abilities by class, mutations by slot",
+  "scripts": {
+    "dev": "npx serve public -p 3000 --no-clipboard",
+    "start": "npx serve public -p 3000 --no-clipboard"
+  },
+  "devDependencies": {
+    "serve": "^14.2.4"
+  }
+}

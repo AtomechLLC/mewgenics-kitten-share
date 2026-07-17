@@ -1,0 +1,79 @@
+{
+  "_note": "Expected decoded values for committed single-cat fixtures. LZ4 TRUTH (01-05): each compact cats.data blob is [u32 decompressedSize][u32 5090 build][LZ4 block]. decodeCat decompresses (vendor/lz4.js) then reads 7 core stats + the appearance record (pattern/coatPalette/classPalette + 14 part-frames). APPEARANCE LOCATOR FIX (01-06): the RO base locator formerly let a NaN coat-scale pass its range gate and counted zero part-regions, mislocating every 'Colorless' cat ~12 bytes late (garik/churrito/save_file_cat all read a phantom base). The corrected locator requires a FINITE scale and >=3 part records whose 2nd u32 == the pattern value, raising correct base-location from ~694 to 1311/1316 corpus cats. The goldens below are the CORRECTED decoder's exact output on the committed .bin (self-consistent: coatPalette in [1,49], L/R slots symmetric); reinaldo (already correctly located) is unchanged. FIELD MODEL (01-06 coat spike): pattern (f4, 1..706) = fur TEXTURE id, NOT color; coatPalette (f8, 1..49) = the REAL fur COLOR = a direct palette.png row; classPalette (f12, 50..68, or -1=none) = class accent color. hp/mp/level: hp is read only when it validates 1..999 (the u32 after the Cp status string was ~2.0 for every fixture, so it stays null); mp/level unlocated -> null. Never a fabricated value. NEVER commit a .sav — reinaldo.bin is a single-cat blob extracted READ-ONLY from steamcampaign02.sav (build 5090).",
+  "fixtures": {
+    "garik.bin": {
+      "format": "compact",
+      "uid": "c3ddcb7fcd4c5fb3",
+      "build": 5090,
+      "buildOk": true,
+      "name": "Garik",
+      "appearanceVerified": true,
+      "stats": { "str": 6, "dex": 4, "con": 7, "int": 5, "spd": 6, "cha": 3, "lck": 4 },
+      "genes": {
+        "pattern": 141,
+        "coatPalette": 18,
+        "classPalette": -1,
+        "slots": { "Body": 67, "Head": 152, "Tail": 160, "RearLeg_L": 226, "RearLeg_R": 226, "FrontLeg_L": 226, "FrontLeg_R": 226, "Eye_L": 146, "Eye_R": 146, "Brow_L": 166, "Brow_R": 166, "Ear_L": 18, "Ear_R": 18, "Mouth": 76 }
+      },
+      "note": "Colorless cat (classPalette -1 = none). Corrected locator: coatPalette 18 (silver), pattern 141, symmetric slots — was mislocated to base+12 late under the old NaN-scale gate."
+    },
+    "churrito.bin": {
+      "format": "compact",
+      "uid": "23cfaeddcde90358",
+      "build": 5090,
+      "buildOk": true,
+      "name": "Churrito",
+      "nameVarint": "two-byte utf16 length prefix in the decompressed record",
+      "appearanceVerified": true,
+      "stats": { "str": 3, "dex": 6, "con": 5, "int": 7, "spd": 3, "cha": 5, "lck": 6 },
+      "genes": {
+        "pattern": 112,
+        "coatPalette": 35,
+        "classPalette": -1,
+        "slots": { "Body": 93, "Head": 72, "Tail": 219, "RearLeg_L": 94, "RearLeg_R": 94, "FrontLeg_L": 94, "FrontLeg_R": 94, "Eye_L": 188, "Eye_R": 188, "Brow_L": 93, "Brow_R": 93, "Ear_L": 6, "Ear_R": 6, "Mouth": 78 }
+      },
+      "note": "Colorless cat (classPalette -1). Corrected locator: coatPalette 35, pattern 112, symmetric slots."
+    },
+    "reinaldo.bin": {
+      "format": "compact",
+      "build": 5090,
+      "buildOk": true,
+      "name": "Reinaldo",
+      "appearanceVerified": true,
+      "stats": { "str": 5, "dex": 6, "con": 6, "int": 7, "spd": 4, "cha": 4, "lck": 3 },
+      "genes": {
+        "pattern": 71,
+        "coatPalette": 48,
+        "classPalette": 55,
+        "slots": { "Body": 223, "Head": 40, "Tail": 27, "RearLeg_L": 26, "RearLeg_R": 26, "FrontLeg_L": 26, "FrontLeg_R": 26, "Eye_L": 166, "Eye_R": 166, "Brow_L": 207, "Brow_R": 207, "Ear_L": 129, "Ear_R": 129, "Mouth": 24 }
+      },
+      "note": "Rich Mage cat — the L/R-symmetry golden: Eye_L==Eye_R (166), Ear_L==Ear_R (129), Brow_L==Brow_R (207), symmetric legs (26). classPalette 55 == MageCat accent (custom_cats.gon). Location unchanged by the 01-06 fix (was already correct). Extracted READ-ONLY from steamcampaign02.sav."
+    },
+    "save_file_cat.bin": {
+      "format": "self-describing",
+      "uid": "8b1b5976a321870c",
+      "name": "Lucina",
+      "buildOk": false,
+      "appearanceVerified": false,
+      "stats": { "str": 4, "dex": 4, "con": 6, "int": 7, "spd": 4, "cha": 5, "lck": 5 },
+      "genes": {
+        "pattern": 411,
+        "coatPalette": 47,
+        "classPalette": -1,
+        "slots": { "Body": 314, "Head": 422, "Tail": 426, "RearLeg_L": 181, "RearLeg_R": 181, "FrontLeg_L": 408, "FrontLeg_R": 408, "Eye_L": 409, "Eye_R": 409, "Brow_L": 438, "Brow_R": 438, "Ear_L": 431, "Ear_R": 431, "Mouth": 301 }
+      },
+      "mutations": [
+        { "region": "Body", "id": 314, "name": "Porcupine" },
+        { "region": "Head", "id": 422, "name": "+2 INT, -1 SPD" },
+        { "region": "Tail", "id": 426, "name": "+2 CHA, -1 STR" },
+        { "region": "Arm", "id": 408, "name": "+2 CON, -1 CHA" },
+        { "region": "Eyes", "id": 409, "name": "+2 CON, -1 INT" },
+        { "region": "Brows", "id": 438, "name": "+2 SPD, -1 CHA" },
+        { "region": "Ears", "id": 431, "name": "+2 LCK, -1 DEX" },
+        { "region": "Mouth", "id": 301, "name": "Hippo Teeth" },
+        { "region": "Fur", "id": 411, "name": "+2 CON, -1 LCK" }
+      ],
+      "note": "Already-decompressed self-describing record (u32@0==19): decoded directly without LZ4. Stats + appearance decode (coatPalette 47), but buildOk is false (no known build word at offset 4 — that is the uid), so appearanceVerified stays false: genes decode for reference but the record never claims a verified portrait. MUTATIONS: 9 regions decode from the >=300 part-frames + pattern (411, Fur) — RearLeg 181 is a base part (no rear-Legs mutation); the common 400-band parts have no in-game name so list their stat effect. L/R pairs (Eyes/Brows/Ears) dedupe to one entry each."
+    }
+  }
+}

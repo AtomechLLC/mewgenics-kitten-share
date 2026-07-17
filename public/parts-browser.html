@@ -1,0 +1,118 @@
+<meta charset="utf-8">
+<title>KittenShare — Parts Browser</title>
+<style>
+  body{font-family:system-ui,sans-serif;margin:16px;background:#faf9f6;color:#222}
+  h1{font-size:18px} .sub{color:#666;font-size:13px;margin-bottom:10px}
+  .bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+  .bar button{padding:5px 12px;border:1px solid #ccc;border-radius:14px;background:#fff;cursor:pointer;font-size:13px}
+  .bar button.on{background:#2d6a4f;color:#fff;border-color:#2d6a4f}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
+  .cell{background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:4px;text-align:center}
+  .cell.hi{border-color:#e8590c;box-shadow:0 0 0 2px #ffd8a8}
+  .cell svg{width:120px;height:120px;display:block;margin:0 auto}
+  .idx{font-size:12px;font-weight:700;margin-top:2px}
+  .mut{font-size:10px;color:#6b3fa0;line-height:1.2;min-height:12px}
+  .note{font-size:12px;color:#7a4a1e;background:#fdeede;border:1px solid #f2d3ac;border-radius:8px;padding:6px 10px;margin-bottom:10px}
+  input{padding:5px 8px;border:1px solid #ccc;border-radius:6px;font-size:13px;width:120px}
+</style>
+<h1>🧩 KittenShare Parts Browser</h1>
+<div class="sub">Every exported frame of a body part, in its on-cat rig pose, labelled with its <b>frame index</b>. Use it to visually match an in-game part to its real index.</div>
+<div class="note" id="note">Loading parts…</div>
+<div class="bar" id="spriteBar"></div>
+<div class="bar">
+  <label>Highlight index: <input id="hi" type="number" placeholder="e.g. 130"></label>
+  <label><input type="checkbox" id="mutOnly"> mutations only (≥300)</label>
+</div>
+<div class="grid" id="grid"></div>
+
+<script src="kittenshare/parts.js"></script>
+<script src="kittenshare/mutations-catalog.js"></script>
+<script>
+const P = (typeof CAT_PARTS !== 'undefined') ? CAT_PARTS : (window.CAT_PARTS || {});
+const CAT = (typeof MUTATIONS_CATALOG !== 'undefined') ? MUTATIONS_CATALOG : (window.MUTATIONS_CATALOG || null);
+// rig layer matrices (from kittenshare.html CAT_RIG_FRONT) so each part shows in its
+// real on-cat orientation. groupOffset is folded in per sprite.
+const GROUP = { tx:3.85, ty:-47.95 };
+const RIG = {
+  CatTail: { sx:0.59964,  r0:0.162415, r1:-0.162415, sy:0.59964,  tx:-24.45, ty:10.05 },
+  CatBody: { sx:0.621307, r0:0.004456, r1:-0.01178,  sy:0.621109, tx:-0.4,   ty:16.35 },
+  CatLeg:  { sx:0.621262, r0:0,        r1:0,         sy:0.621262, tx:-4.7,   ty:37.25 },
+  CatHead: { sx:0.621262, r0:0,        r1:0,         sy:0.621262, tx:10.95,  ty:2.3   },
+  CatEar:  { sx:0.621262, r0:0,        r1:0,         sy:0.621262, tx:10.95,  ty:2.3   },
+  CatEye:  { sx:0.621262, r0:0,        r1:0,         sy:0.621262, tx:10.95,  ty:2.3   },
+  CatEyebrow:{ sx:0.621262,r0:0,       r1:0,         sy:0.621262, tx:10.95,  ty:2.3   },
+  CatMouth:{ sx:0.621262, r0:0,        r1:0,         sy:0.621262, tx:10.95,  ty:2.3   },
+};
+const VIEWBOX = { // per-sprite framing so the part fills the cell
+  CatTail: '-95 -95 90 90',
+  CatHead: '-40 -95 90 90',
+  CatBody: '-55 -75 110 110',
+  CatLeg:  '-55 -60 90 90',
+  CatEar:  '-40 -95 90 90',
+  CatEye:  '-30 -70 60 60',
+  CatEyebrow:'-30 -75 60 60',
+  CatMouth:'-30 -55 60 60',
+};
+
+let uid = 0;
+function namespace(defs, body){
+  const ids = [...new Set((defs.match(/id="([^"]+)"/g) || []).map(s => s.slice(4, -1)))];
+  if(!ids.length) return {defs, body};
+  const suf = '_b' + (uid++);
+  for(const id of ids){
+    defs = defs.split('id="'+id+'"').join('id="'+id+suf+'"');
+    defs = defs.split('#'+id+')').join('#'+id+suf+')');
+    defs = defs.split('#'+id+'"').join('#'+id+suf+'"');
+    body = body.split('#'+id+')').join('#'+id+suf+')');
+    body = body.split('#'+id+'"').join('#'+id+suf+'"');
+  }
+  return {defs, body};
+}
+function mat(m){ return `matrix(${m.sx==null?1:m.sx} ${m.r0||0} ${m.r1||0} ${m.sy==null?1:m.sy} ${m.tx||0} ${m.ty||0})`; }
+// Guess the mutation category for a sprite so we can label ≥300 frames with a name.
+function mutName(sprite, idx){
+  if(!CAT || idx < 300) return '';
+  // catalog is keyed by category -> {id:{name}}. Search all categories for this id.
+  for(const cat in CAT){ const e = CAT[cat] && CAT[cat][idx]; if(e && e.name) return e.name; }
+  return '';
+}
+
+let curSprite = 'CatTail';
+function render(){
+  const s = P[curSprite]; const frames = s && (s.frames || s);
+  const note = document.getElementById('note');
+  if(!frames){ note.textContent = 'No data for '+curSprite; document.getElementById('grid').innerHTML=''; return; }
+  const keys = Object.keys(frames).map(Number).filter(n=>!isNaN(n)).sort((a,b)=>a-b);
+  const hiVal = parseInt(document.getElementById('hi').value, 10);
+  const mutOnly = document.getElementById('mutOnly').checked;
+  const vb = VIEWBOX[curSprite] || '-80 -100 170 135';
+  const rig = RIG[curSprite] || {sx:0.62,sy:0.62};
+  const g = document.getElementById('grid');
+  let html = '', shown = 0;
+  for(const k of keys){
+    if(mutOnly && k < 300) continue;
+    const f = frames[k]; if(!f) continue;
+    const ns = f.defs ? namespace(f.defs, f.body) : {defs:'', body:f.body};
+    const inner = `<g transform="matrix(1 0 0 1 ${GROUP.tx} ${GROUP.ty})"><g transform="${mat(rig)}">${ns.body}</g></g>`;
+    const svg = `<svg viewBox="${vb}"><defs>${ns.defs}</defs>${inner}</svg>`;
+    const nm = mutName(curSprite, k);
+    const hi = (k === hiVal) ? ' hi' : '';
+    html += `<div class="cell${hi}">${svg}<div class="idx">#${k}</div><div class="mut">${nm}</div></div>`;
+    shown++;
+  }
+  g.innerHTML = html;
+  note.innerHTML = `<b>${curSprite}</b>: ${shown} frames shown (of ${keys.length}). `+
+    `Grays are the raw art (uncoloured); black outlines show the true silhouette. `+
+    (hiVal? `Highlighted <b>#${hiVal}</b> in orange.` : `Type an index above to highlight it.`);
+}
+
+// sprite buttons
+const sprites = Object.keys(P);
+const bar = document.getElementById('spriteBar');
+bar.innerHTML = sprites.map(sp=>`<button data-sp="${sp}" class="${sp===curSprite?'on':''}">${sp}</button>`).join('');
+bar.addEventListener('click', e=>{ const b=e.target.closest('button'); if(!b)return; curSprite=b.dataset.sp;
+  [...bar.children].forEach(x=>x.classList.toggle('on', x.dataset.sp===curSprite)); render(); });
+document.getElementById('hi').addEventListener('input', render);
+document.getElementById('mutOnly').addEventListener('change', render);
+render();
+</script>

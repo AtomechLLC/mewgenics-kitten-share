@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mewgenics Mutations</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,sans-serif;font-size:14px;color:#222;background:#f7f3ec;padding:1.5rem}
+  h1{font-size:20px;font-weight:600;margin-bottom:4px}
+  .subtitle{font-size:13px;color:#666;margin-bottom:1rem}
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+  .controls input{padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;width:220px}
+  .filter-btns{display:flex;gap:6px;flex-wrap:wrap}
+  .filter-btns button{font-size:12px;padding:4px 12px;border-radius:20px;cursor:pointer;border:1px solid #bbb;background:#fff;color:#555;transition:background .15s,color .15s}
+  .filter-btns button.active{background:#1a1a2e;color:#fff;border-color:#1a1a2e}
+  .dl-btn{margin-left:auto;padding:6px 14px;background:#2d6a4f;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500}
+  .dl-btn:hover{background:#1b4332}
+  .count{font-size:12px;color:#888;margin-bottom:6px}
+  .tbl-wrap{overflow-x:auto;border:1px solid #ddd;border-radius:8px;background:#fff}
+  table{border-collapse:collapse;width:100%;min-width:640px}
+  thead th{
+    background:#1a1a2e;color:#fff;
+    font-size:12px;font-weight:600;
+    text-transform:uppercase;letter-spacing:.04em;
+    padding:9px 12px;text-align:left;
+    white-space:nowrap;
+    position:sticky;top:0;
+    cursor:pointer;user-select:none;
+    transition:background .15s;
+  }
+  thead th:hover{background:#2d2d50}
+  thead th.sort-asc::after{content:" ▲";font-size:10px;opacity:.9}
+  thead th.sort-desc::after{content:" ▼";font-size:10px;opacity:.9}
+  thead th:not(.sort-asc):not(.sort-desc)::after{content:" ⇅";font-size:10px;opacity:.35}
+  td{padding:7px 12px;border-bottom:1px solid #eee;vertical-align:top;line-height:1.45}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:#f9f9f9}
+  .slot-badge{display:inline-block;font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;white-space:nowrap}
+  .defect-badge{display:inline-block;font-size:10px;font-weight:600;padding:1px 6px;border-radius:10px;background:#fee2e2;color:#991b1b;margin-left:5px;vertical-align:middle}
+  .effect{color:#555;font-size:12px}
+  .type-cell{font-size:11px;color:#888}
+  .s-body{background:#d1fae5;color:#065f46}
+  .s-ear{background:#ede9fe;color:#4c1d95}
+  .s-eyebrow{background:#fef3c7;color:#78350f}
+  .s-eye{background:#fee2e2;color:#7f1d1d}
+  .s-fur{background:#dcfce7;color:#166534}
+  .s-head{background:#dbeafe;color:#1e3a8a}
+  .s-leg{background:#fce7f3;color:#831843}
+  .s-mouth{background:#f3f4f6;color:#374151}
+  .s-tail{background:#fef2f2;color:#7f1d1d}
+  .no-results{text-align:center;color:#999;padding:2rem;font-style:italic}
+</style>
+</head>
+<body>
+
+<h1>Mewgenics — All Mutations by Slot</h1>
+<p class="subtitle">Named mutations only · Generic stat mutations (e.g. Body 400–442) excluded · Click column headers to sort · Data sourced from mewgenics.wiki</p>
+
+<div class="controls">
+  <input type="search" id="srch" placeholder="Search mutations…" oninput="renderTable()">
+  <div class="filter-btns" id="slotBtns"></div>
+  <button class="dl-btn" onclick="downloadCSV()">⬇ Download CSV</button>
+</div>
+<div class="count" id="cnt"></div>
+
+<div class="tbl-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th onclick="sortBy(0)" id="th0">Name</th>
+        <th onclick="sortBy(1)" id="th1">Slot</th>
+        <th onclick="sortBy(2)" id="th2">Effect</th>
+        <th onclick="sortBy(3)" id="th3">Type</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<script>
+const data = [
+  ["Rock Bod","body","+1 CON","mutation"],
+  ["Cactus Bod","body","+1 Thorns","mutation"],
+  ["Turtle Bod","body","-1 SPD, +5 Shield","mutation"],
+  ["Snail Bod","body","+10 Shield, -2 SPD","mutation"],
+  ["Robot Body","body","+1 SPD, +1 INT","mutation"],
+  ["Conjoined Bod","body","+1 LCK","mutation"],
+  ["Skin & Bones","body","+12 Shield, -3 CON","mutation"],
+  ["Udders","body","+1 CHA","mutation"],
+  ["Beach Bod","body","+1 STR, +1 CON, -1 INT","mutation"],
+  ["Maggot Bod","body","Units that contact you get knocked back 2 tiles","mutation"],
+  ["Puffball Bod","body","+1 CHA","mutation"],
+  ["Square Bod","body","+1 CON","mutation"],
+  ["Money Bag Bod","body","Spawn a coin when you take damage","mutation"],
+  ["Spike Bod","body","+1 Kinetic Spikes","mutation"],
+  ["Porcupine","body","+2 Thorns, -1 CHA","mutation"],
+  ["Carapace","body","+1 Brace","mutation"],
+  ["Pangolin","body","+2 Shield","mutation"],
+  ["Camel Hump","body","Immune to Heat Wave weather, +1 CON","mutation"],
+  ["Egg Sack Back","body","25% chance to spawn a Charmed Fly each turn","mutation"],
+  ["Fractured Bod","body","When you take damage from an attack, gain a random buff","mutation"],
+  ["Brick Bod","body","+1 Shield","mutation"],
+  ["Kitten Bod","body","Spawn a Charmed Kitten familiar when you get downed","mutation"],
+  ["Backpack","body","Gain an extra consumable item at the end of each battle","mutation"],
+  ["Fatty","body","Trample. When damaged, move 1 tile in a random direction. -3 SPD","mutation"],
+  ["Eyeball","body","Gain +1 range when you get a kill","mutation"],
+  ["spike body","body","+1 Thorns","mutation"],
+  ["mermaid body","body","+5 Shield","mutation"],
+  ["human head body","body","Start with +1 Bonus Attack, +1 CON","mutation"],
+  ["slender","body","-2 CON, +1 SPD","mutation"],
+  ["Gastroschisis","body","-2 CON","defect"],
+  ["Deformed Ribcage","body","-2 SPD","defect"],
+  ["Malnourished","body","-1 CON","defect"],
+  ["Body Welts","body","Start each battle with Bruise 1","defect"],
+  ["Conjoined Body","body","-3 SPD, +2 CON","defect"],
+  ["horn","ear","+1 STR","mutation"],
+  ["antenna","ear","+1 INT","mutation"],
+  ["fishy","ear","+1 Health and Mana Regeneration while wet","mutation"],
+  ["bullhorn","ear","Adds +1 Knockback to basic attack if melee. +1 STR","mutation"],
+  ["pigtails","ear","+1 CHA","mutation"],
+  ["boil","ear","+1 Shield","mutation"],
+  ["bunny ear","ear","+1 SPD","mutation"],
+  ["brains","ear","+1 INT","mutation"],
+  ["shrek","ear","+1 STR, -1 CHA","mutation"],
+  ["antlers","ear","Adds +1 Bleed to basic attack","mutation"],
+  ["human","ear","+1 INT","mutation"],
+  ["Ram horns","ear","Adds +1 Knockback to basic attack if melee. +1 Shield","mutation"],
+  ["Deer horns","ear","Thorns 1. Basic attack inflicts Bleed if melee","mutation"],
+  ["Fly Ears","ear","50% chance to spawn a Charmed Fly each turn. Start with Poison 1","mutation"],
+  ["Bat Ears","ear","You can see hidden things. 5% dodge chance","mutation"],
+  ["Bone Ears","ear","10% chance to reanimate downed units with 50% HP","mutation"],
+  ["Frog Eyes","ear","Brace 1 while wet","mutation"],
+  ["Pierced Ears","ear","Gain +1 Charge when you take damage","mutation"],
+  ["Alien Ears","ear","+1 Kinetic Spikes","mutation"],
+  ["Spring Ears","ear","Units that contact you get knocked back 1 tile","mutation"],
+  ["Lamb Ears","ear","+1 CHA","mutation"],
+  ["Vamp Ears","ear","Gain 1 HP when basic attack deals damage","mutation"],
+  ["Tree Branch","ear","If wet, gain +1 Charge and +1 Shield at end of your turn","mutation"],
+  ["Worm Ear","ear","5% chance to spawn a Maggot familiar each turn","mutation"],
+  ["Ant Antenna","ear","An extra food pickup will spawn in each battle","mutation"],
+  ["Snake Ears","ear","5% chance to Petrify on damage and when hit","mutation"],
+  ["External Gills","ear","Basic attack leaves water tiles","mutation"],
+  ["Hook Ears","ear","Thorns 1. 10% chance to inflict Immobile on contact","mutation"],
+  ["Mace Ears","ear","Basic attack has +1 Knockback","mutation"],
+  ["Blubber Lobes","ear","Brace 1","mutation"],
+  ["Metal Plate","ear","+3 Shield","mutation"],
+  ["Metal Detector","ear","Spawn 1-3 extra coins/scrap at start of each battle","mutation"],
+  ["Docked Ears","ear","Start with Bleed 1 and a bonus attack","mutation"],
+  ["Large Leaves","ear","Gain 3 mana at end of turn if you didn't move","mutation"],
+  ["Burning ears","ear","Basic attack inflicts Burn 1","mutation"],
+  ["Frozen ears","ear","Basic attack has 15% chance to inflict Freeze","mutation"],
+  ["Lightning Rods","ear","Electric immunity","mutation"],
+  ["Aura Ears","ear","+1 Divine Shield","mutation"],
+  ["Large Ears","ear","10% chance to backflip when targeted","mutation"],
+  ["Infested Ears","ear","20% chance to spawn a Charmed Flea when damaged. -1 CON","mutation"],
+  ["Long Antlers","ear","Thorns 1","mutation"],
+  ["Kitten (ear)","ear","Spawn a Charmed Kitten familiar when downed","mutation"],
+  ["Mouse Ears","ear","Units that contact or attack you have 15% chance to get Charmed","mutation"],
+  ["Jackrabbit Ears","ear","Movement action is a jump","mutation"],
+  ["Folded Ears","ear","+10% dodge chance","mutation"],
+  ["Fin Ears","ear","+2 Damage while wet","mutation"],
+  ["Goat Horns","ear","+1 Knockback damage. Basic attack has +1 Knockback","mutation"],
+  ["Electric Ears","ear","Electric damage increased by 1. +1 SPD","mutation"],
+  ["Head Ferns","ear","Gain +1 Charge every time you cast a spell","mutation"],
+  ["slender (ear)","ear","+10% dodge chance","mutation"],
+  ["rat ears","ear","+2% dodge chance","mutation"],
+  ["no ears","ear","-2 DEX","defect"],
+  ["anotia","ear","-2 LCK","defect"],
+  ["turner syndrome","ear","-2 INT","defect"],
+  ["underdeveloped ears","ear","-1 CHA","defect"],
+  ["low ears","ear","Start each battle with Confusion 2","defect"],
+  ["wilted ears","ear","Start each battle with Immobile 1","defect"],
+  ["Bolt Brows","eyebrow","+1 SPD","mutation"],
+  ["Confusing Brows","eyebrow","10% chance to inflict Confusion on contact/attackers","mutation"],
+  ["Metal Brows","eyebrow","+2 Shield","mutation"],
+  ["Fancy Makeup","eyebrow","+1 CHA","mutation"],
+  ["Wolfy Brows","eyebrow","+1 DEX","mutation"],
+  ["Dotty Brows","eyebrow","+1 LCK","mutation"],
+  ["Clown Makeup","eyebrow","5% chance to inflict Fear on contact/attackers","mutation"],
+  ["Antennae","eyebrow","+1 Mana Regeneration, +1 Health Regeneration","mutation"],
+  ["Long Lashes","eyebrow","+1 CHA","mutation"],
+  ["Spiny Brows","eyebrow","+1 Thorns","mutation"],
+  ["Extra Eye","eyebrow","+1 Range","mutation"],
+  ["Stacked Brows","eyebrow","When you cast your 3rd spell each turn, heal 2","mutation"],
+  ["Square Glasses","eyebrow","Spawn 1-2 extra pickups in each battle","mutation"],
+  ["Holy Brows","eyebrow","When an allied cat dies, gain +2 Damage","mutation"],
+  ["Triangle Eyes","eyebrow","You can reroll your options when you level up","mutation"],
+  ["slender (eyebrow)","eyebrow","+5% dodge chance. Basic attack has 1% chance to inflict Freeze","mutation"],
+  ["no eyebrows","eyebrow","-2 CHA","defect"],
+  ["bushy","eyebrow","-1 LCK","defect"],
+  ["no eyebrows 2","eyebrow","-1 CHA","defect"],
+  ["unibrow","eyebrow","-1 INT","defect"],
+  ["Button Eyes","eye","Basic attack has 10% chance to inflict Fear","mutation"],
+  ["Demon Eyes","eye","+1 DEX","mutation"],
+  ["Pop Eyes","eye","+1 Thorns","mutation"],
+  ["Gem Eyes","eye","+1 INT, +1 CHA","mutation"],
+  ["Holes","eye","Take your turn later","mutation"],
+  ["Zen Eyes","eye","-1 STR, -1 DEX, +3 INT","mutation"],
+  ["Confusing Eyes","eye","Basic attack has 10% chance to inflict Confusion 3","mutation"],
+  ["Half Moon Eyes","eye","Gain 1 mana when anything dies","mutation"],
+  ["Spider Eyes","eye","+5% dodge chance","mutation"],
+  ["Doll Eyes","eye","+2 corpse health","mutation"],
+  ["Octo Eyes","eye","+1 Health Regeneration","mutation"],
+  ["gecko eye","eye","No extra damage from backstabs","mutation"],
+  ["Metal Eyes","eye","+1 Brace, +1 Shield","mutation"],
+  ["Issac's Eyes","eye","Basic attack creates water tiles. +1 Divine Shield","mutation"],
+  ["Dead Eyes","eye","When downed, spawn 3 Flies. +2 corpse health","mutation"],
+  ["Kinetic eyes","eye","+1 Kinetic Spikes","mutation"],
+  ["Lightning eyes","eye","15% chance to counter with Chain Lightning when hit","mutation"],
+  ["Dice Eyes","eye","Gain a random stat up at the end of each turn","mutation"],
+  ["Goat Eyes","eye","Can see hidden things. +1 Knockback damage","mutation"],
+  ["Horn Eyes","eye","Blind. +1 Damage. +1 Thorns","mutation"],
+  ["Treasure Eyes","eye","Spawn 2 extra coins each battle","mutation"],
+  ["Nail Eyes","eye","Thorns 1","mutation"],
+  ["4 Eyes","eye","Gain 2 Charge each time you cast 4 spells","mutation"],
+  ["Baby Blue Eyes","eye","+2 CHA","mutation"],
+  ["Bull's Eye","eye","+10% crit chance","mutation"],
+  ["Spinning Eyes","eye","Basic attack has 15% chance to inflict Confusion","mutation"],
+  ["Glassy Eyes","eye","At battle start, gain a random pill if trinket slot is empty","mutation"],
+  ["Bleeding Eyes","eye","Start each battle Bleeding. Gain 1 Charge each time you take damage","mutation"],
+  ["Huge Eyes","eye","Basic attack can't miss","mutation"],
+  ["Infested Eyes","eye","Blind. Spawn a Flea when you take damage","mutation"],
+  ["Fake Eyelashes","eye","Basic attack has 10% chance to Charm","mutation"],
+  ["Bolt Eyes","eye","Basic attack is electric element with 5% stun chance","mutation"],
+  ["Ice Eyes","eye","Basic attack is ice element and inflicts Slow","mutation"],
+  ["Fire Eyes","eye","Basic attack inflicts Burn","mutation"],
+  ["Water Eyes","eye","+1 Health Regen while wet. Basic attack is water element","mutation"],
+  ["Leech Eyes","eye","Basic attack inflicts Leech","mutation"],
+  ["Flower Eyes","eye","Gain Charge 1 the first time you move each turn","mutation"],
+  ["Poison Eyes","eye","Basic attack inflicts Poison 1. Start each battle Poisoned","mutation"],
+  ["Clown Eyes","eye","5% chance to inflict Fear on contact/attackers","mutation"],
+  ["Sun Eyes","eye","10% chance to Blind units that contact you","mutation"],
+  ["Evil Eyes","eye","Inflict a random debuff on units who contact you","mutation"],
+  ["Rock Eyes","eye","Spawn a rock when damaged. +1 Shield","mutation"],
+  ["Hypno Eyes","eye","Basic attack has 15% chance to inflict Confusion 2","mutation"],
+  ["Pop Eyes 2","eye","+1 range, +1 reach","mutation"],
+  ["8 Eyes","eye","Emit 4 Sparkles each time you cast 8 spells","mutation"],
+  ["Chaos Eyes","eye","Bonus ability is a different random spell each battle","mutation"],
+  ["Runny Mascara","eye","All Stats Up while Bleeding","mutation"],
+  ["Chameleon Eyes","eye","No extra damage from backstabs","mutation"],
+  ["glasses","eye","+1 INT","mutation"],
+  ["alien eyes","eye","+1 range. Basic attack is gravity element","mutation"],
+  ["mothman eyes","eye","Basic attack has 15% chance to inflict Fear","mutation"],
+  ["slender (eye)","eye","Basic attack has 10% chance to inflict Slow","mutation"],
+  ["spider eye","eye","+5% crit chance","mutation"],
+  ["no eyes","eye","Blind","defect"],
+  ["graves disease","eye","-2 CHA","defect"],
+  ["anophthalmia","eye","-2 LCK","defect"],
+  ["lazy eye","eye","10% miss chance","defect"],
+  ["cataracts","eye","Gain 5% miss chance every turn","defect"],
+  ["crossed eyes","eye","Start each battle with Confusion 2","defect"],
+  ["Stitches","fur","+1 Health Regeneration, -1 CHA","mutation"],
+  ["Fish Scales","fur","+1 Health and Mana Regeneration while wet","mutation"],
+  ["Conjoined","fur","+1 LCK","mutation"],
+  ["Patches","fur","Start each battle with a random stat up","mutation"],
+  ["Confusing Hide","fur","Units that contact/attack you have 10% chance to become Confused","mutation"],
+  ["Robot Hide","fur","+1 INT","mutation"],
+  ["Veiny","fur","+1 STR","mutation"],
+  ["Eyeballs","fur","+5% dodge chance","mutation"],
+  ["Heart Tattoo","fur","+1 CHA","mutation"],
+  ["Tatted Up","fur","5% chance to inflict Fear on attack; 5% chance on contact","mutation"],
+  ["Cash Hide","fur","Gain double the effects of pickups you collect","mutation"],
+  ["skunk Hide","fur","Units who contact you get Poison 2","mutation"],
+  ["neurofibromatosis","fur","-2 CHA","defect"],
+  ["melanocytic nevus","fur","-2 CHA, +1 Shield","defect"],
+  ["bleeding (fur)","fur","Start each battle with Bleed 1","defect"],
+  ["blue spots","fur","Mage abilities also offered when leveling up. -2 CHA","defect"],
+  ["red dots","fur","Fighter abilities also offered when leveling up. -2 CHA","defect"],
+  ["jaundice","fur","Thief abilities also offered when leveling up. -2 CHA","defect"],
+  ["vitiligo","fur","10% dodge chance. -1 CHA","defect"],
+  ["Square head","head","+1 CON","mutation"],
+  ["Sloth head","head","-1 INT, +1 STR, +1 CON","mutation"],
+  ["Big brain","head","+2 INT, -1 CON","mutation"],
+  ["Spike head","head","+1 Thorns","mutation"],
+  ["Sludge head","head","+2 Health Regen, +5% dodge. -2 CHA","mutation"],
+  ["Strong Chin","head","+1 CHA","mutation"],
+  ["Alien head","head","+1 INT","mutation"],
+  ["Bump-on-the-head Head","head","Units that contact you get knocked back 1 tile. +1 Shield","mutation"],
+  ["Frog Head","head","+1 movement range while wet. Water doesn't slow movement","mutation"],
+  ["half moon","head","+2 LCK","mutation"],
+  ["rock head","head","+2 Shield","mutation"],
+  ["Money Bag head","head","Spawn a coin when you take damage","mutation"],
+  ["Magnet Head","head","Basic attack pulls units towards you","mutation"],
+  ["Poop Head","head","Poop when you take damage","mutation"],
+  ["Pyramid Head","head","Gain +1 INT at end of each turn","mutation"],
+  ["Upside Down Head","head","At battle start, swap your highest and lowest stats","mutation"],
+  ["Fractured Head","head","When you take damage from an attack, gain a random buff","mutation"],
+  ["Sideways Head","head","+5% dodge chance","mutation"],
+  ["Long Neck","head","+1 range","mutation"],
+  ["Exposed Brain","head","Gain +1 INT permanently after each battle. Start with Bruise 2","mutation"],
+  ["Bubble Head","head","Basic attack has +2 Knockback","mutation"],
+  ["Button Head","head","5% chance to inflict Fear on contact/attackers","mutation"],
+  ["spiked head","head","+1 Thorns","mutation"],
+  ["tyler head","head","Immune to ice","mutation"],
+  ["grey head","head","+2 INT","mutation"],
+  ["Human Head","head","Take an extra turn at the start of the battle","mutation"],
+  ["slender (head)","head","+1 range, +1 reach, -1 CHA","mutation"],
+  ["microcephaly","head","-2 INT","defect"],
+  ["macrocephaly","head","-2 INT","defect"],
+  ["concave head","head","-1 INT","defect"],
+  ["soft spot","head","Attacks against your face count as backstabs","defect"],
+  ["cyclops","head","20% miss chance. Spells cost 1 less mana","defect"],
+  ["conjoined head","head","-3 CHA, +2 INT","defect"],
+  ["sloth (head)","head","Brace 1, -3 CHA","defect"],
+  ["Frog legs","leg","+1 movement range while wet. Water doesn't slow movement","mutation"],
+  ["Hooves","leg","Basic attack has 5% chance to Stun. +1 SPD","mutation"],
+  ["Tentacles","leg","Knockback immunity","mutation"],
+  ["Lobster Claws","leg","Basic attack has 5% chance to Immobilize","mutation"],
+  ["Muscular Legs","leg","+1 STR","mutation"],
+  ["Tar Legs","leg","+5% dodge chance","mutation"],
+  ["Bug Legs","leg","+1 DEX","mutation"],
+  ["Tires","leg","+1 SPD","mutation"],
+  ["Human Legs","leg","+1 LCK","mutation"],
+  ["Knife Legs","leg","Basic attack has 10% chance to inflict Bleed 3","mutation"],
+  ["Spring Legs","leg","Movement action is a jump","mutation"],
+  ["Square Legs","leg","+1 CON","mutation"],
+  ["Balloon Legs","leg","Basic attack has +1 Knockback","mutation"],
+  ["Snake Legs","leg","+1 reach","mutation"],
+  ["Weapon Legs","leg","Weapons have +1 Damage","mutation"],
+  ["Socks","leg","Ice immunity","mutation"],
+  ["Raptor Claws","leg","Basic attack inflicts Bleed 1 if melee","mutation"],
+  ["Stigmata","leg","+1 Divine Shield","mutation"],
+  ["High Tops","leg","10% chance to gain a bonus move each turn","mutation"],
+  ["Talons","leg","10% chance to gain a bonus attack each turn","mutation"],
+  ["Flippers","leg","Moving through water tiles costs 0 movement","mutation"],
+  ["Bear Claws","leg","+1 STR, +1 CON","mutation"],
+  ["Beetle Feet","leg","+2 SPD","mutation"],
+  ["Branches","leg","+1 CON","mutation"],
+  ["Extra Head","leg","Collarless spells cost -1 mana. -2 SPD","mutation"],
+  ["Needle Feet","leg","Basic attack inflicts a random debuff","mutation"],
+  ["Mushroom Legs","leg","Gain 2 random stat ups and 1 random stat down at end of each turn","mutation"],
+  ["Glass Bottle","leg","Equip a temporary Bottles weapon at battle start","mutation"],
+  ["Water Bottle","leg","Equip a temporary Water Bottle trinket at battle start","mutation"],
+  ["Sausage Legs","leg","+1 Health Regeneration","mutation"],
+  ["Jet Legs","leg","+1 movement range. Movement action is a jump","mutation"],
+  ["Peg Legs","leg","50% chance to spawn a pickup on adjacent tile when turn ends. -1 SPD","mutation"],
+  ["Wing Legs","leg","Basic attack has wind element and +1 Knockback","mutation"],
+  ["Ape Legs","leg","Basic attack tosses units into the air if melee. +1 STR","mutation"],
+  ["Glass Legs","leg","+1 Bleed Thorns. Spawn glass when you take damage","mutation"],
+  ["Crow Legs","leg","Basic attack inflicts Soul Link","mutation"],
+  ["Floating Legs","leg","Immune to tile effects","mutation"],
+  ["Wing Legs 2","leg","Fly away when hit. +2 SPD","mutation"],
+  ["Lucky Toe","leg","When you take damage, gain +1 LCK","mutation"],
+  ["Whip Legs","leg","Basic attack makes units face away from you","mutation"],
+  ["Kitten Legs","leg","Spawn a Charmed Kitten familiar when downed","mutation"],
+  ["Wing Hoof Legs","leg","Movement action is a jump. Basic attack inflicts Bruise","mutation"],
+  ["Sonichu Legs","leg","+2 SPD","mutation"],
+  ["bigfoot Legs","leg","Trample","mutation"],
+  ["nessie Legs","leg","All Stats Up while wet","mutation"],
+  ["mothman Legs","leg","Movement action is a jump. Basic attack inflicts Bleed","mutation"],
+  ["slender (leg)","leg","Ignore effects of tiles and traps","mutation"],
+  ["lobster claw","leg","-2 STR","defect"],
+  ["extra finger","leg","-2 DEX","defect"],
+  ["club foot","leg","-2 SPD","defect"],
+  ["syndactyly","leg","Water doesn't slow movement. -2 SPD","defect"],
+  ["curled paw","leg","-1 STR","defect"],
+  ["club foot 2","leg","Trample. -4 SPD","defect"],
+  ["backwards knees","leg","-1 SPD","defect"],
+  ["blob legs","leg","Permanently Slow. +1 STR","defect"],
+  ["Sabertoothed","mouth","+1 STR","mutation"],
+  ["Hippo Teeth","mouth","Gain 1 health when you deal damage","mutation"],
+  ["Flesh Kid","mouth","+1 Health Regeneration","mutation"],
+  ["Delerious","mouth","+1 INT","mutation"],
+  ["Spider","mouth","Basic attack inflicts Poison","mutation"],
+  ["Ash","mouth","+100 corpse health","mutation"],
+  ["Famine","mouth","10% chance to spawn a Fly when you take damage","mutation"],
+  ["Alien Chomp","mouth","Basic attack has 1% chance to instakill","mutation"],
+  ["Licky","mouth","+1 Health Regeneration","mutation"],
+  ["Jacko","mouth","Basic attack has 10% chance to inflict Fear","mutation"],
+  ["Lip Fillers","mouth","+1 CHA","mutation"],
+  ["Leech Mouth","mouth","Basic attack inflicts Leech 1","mutation"],
+  ["Bear Trap Mouth","mouth","Basic attack has 10% chance to Immobile if melee. +1 STR","mutation"],
+  ["Full Mouth","mouth","At end of each round, spit at an enemy","mutation"],
+  ["Gold Tooth","mouth","Spawn 5-10 coins when downed","mutation"],
+  ["Double Mouth","mouth","10% chance to gain a bonus attack each turn","mutation"],
+  ["Horse Face","mouth","Basic attack inflicts Bruise. -1 CHA","mutation"],
+  ["Glass Teeth","mouth","Spawn glass when damaged. +1 Bleed Thorns","mutation"],
+  ["mole mouth","mouth","Movement action is Dig","mutation"],
+  ["Catfish Mouth","mouth","Water doesn't slow movement. +1 Health Regen while wet","mutation"],
+  ["Zipper Mouth","mouth","+3 Shield","mutation"],
+  ["Shark Mouth","mouth","Basic attack inflicts Bleed","mutation"],
+  ["Gills","mouth","+2 Health Regen while wet","mutation"],
+  ["Eyeball (mouth)","mouth","+1 range","mutation"],
+  ["Double Mouth 2","mouth","Gain +1 Health Regen whenever you eat food","mutation"],
+  ["Clown Lips","mouth","You can reroll your options when you level up","mutation"],
+  ["Bandage Mouth","mouth","Can't eat/use consumables. +2 Health Regeneration","mutation"],
+  ["Fetus Mouth","mouth","Basic attack can be used 2 extra times but replaced with 1-dmg spit","mutation"],
+  ["beaver teeth","mouth","Basic attack destroys inanimate objects and turns tiles into dirt","mutation"],
+  ["pig snout","mouth","+2 CON","mutation"],
+  ["Dog tongue","mouth","Basic attack creates water tiles","mutation"],
+  ["Isaacs mouth","mouth","Adjacent units get All Stats Down","mutation"],
+  ["Edmund beard","mouth","Ice Immunity","mutation"],
+  ["Tylers beard","mouth","+1 INT","mutation"],
+  ["Mermaid mouth","mouth","Basic attack inflicts Bleed","mutation"],
+  ["bigfoot mouth","mouth","When food spawns within 2 tiles, move to it","mutation"],
+  ["Slender (mouth)","mouth","Basic attack has 10% chance to inflict Fear","mutation"],
+  ["spider mouth","mouth","Basic attack has 10% chance to inflict Webbed","mutation"],
+  ["rat mouth","mouth","Basic attack inflicts Poison","mutation"],
+  ["no mouth","mouth","Can't eat food, use consumables, or use musical abilities","defect"],
+  ["cleft palate","mouth","-2 CHA","defect"],
+  ["anodontia","mouth","-1 STR, -1 DEX","defect"],
+  ["underbite","mouth","-2 INT, +1 CON","defect"],
+  ["overbite","mouth","-2 CHA, +1 STR","defect"],
+  ["Extra Paw","tail","+1 STR","mutation"],
+  ["Turtle Head","tail","Poop when you take damage","mutation"],
+  ["Scorpion Tail","tail","Basic attack inflicts Poison","mutation"],
+  ["Rock Tail","tail","Basic attack has 5% chance to Stun","mutation"],
+  ["Monkey Tail","tail","+1 DEX","mutation"],
+  ["Cactus Tail","tail","+1 Thorns","mutation"],
+  ["Big Lump Tail","tail","+1 CON","mutation"],
+  ["Antenna Tail","tail","+1 SPD","mutation"],
+  ["Baby Tail","tail","+5% dodge chance, +1 LCK","mutation"],
+  ["Baboon's Ass","tail","+1 CHA","mutation"],
+  ["Hand Tail","tail","Basic attack has 10% chance to repeat once","mutation"],
+  ["Thorn Tail","tail","Thorns 1","mutation"],
+  ["Holy Tail","tail","+1 Divine Shield","mutation"],
+  ["Hose Tail","tail","Basic attack creates water tiles","mutation"],
+  ["Bone Tail","tail","10% chance to reanimate downed units with 50% HP","mutation"],
+  ["Maggot Tail","tail","20% chance to spawn a Maggot when hit","mutation"],
+  ["Grass Tail","tail","25% chance to spawn tall grass at end of movement","mutation"],
+  ["Skunk Tail","tail","When hit, fart a Poison 4 attack with Knockback behind you","mutation"],
+  ["Rattle","tail","Basic attack inflicts Poison","mutation"],
+  ["Snake Tail","tail","Units who contact you get Poisoned","mutation"],
+  ["Glass Tail","tail","Bleed 1. Bleed Thorns 2","mutation"],
+  ["Extra Head (tail)","tail","+1 INT","mutation"],
+  ["Exhaust Pipe","tail","Gain +1 SPD each turn","mutation"],
+  ["Jetpack Tail","tail","Movement action is a jump","mutation"],
+  ["Wing Tail","tail","+2 SPD","mutation"],
+  ["Spring Tail","tail","Units that contact you get knocked back 2 tiles","mutation"],
+  ["Eyeball Tail","tail","10% dodge chance. Bruise 1","mutation"],
+  ["Tree Branch Tail","tail","If you don't move, gain 3 Charge at end of turn","mutation"],
+  ["Mr. Worm","tail","You can unequip cursed items and parasites","mutation"],
+  ["Dice Tail","tail","You can reroll your options when you level up","mutation"],
+  ["Tennis Racket","tail","+25% chance to reflect projectiles","mutation"],
+  ["Fire Flower Tail","tail","Basic attack inflicts Burn 1","mutation"],
+  ["Horn Tail","tail","+1 Thorns","mutation"],
+  ["Tail Feather","tail","Basic attack is wind element","mutation"],
+  ["Flame Tail","tail","Basic attack inflicts Burn 1","mutation"],
+  ["Light Bulb","tail","While at full mana, +2 Damage","mutation"],
+  ["Tongue Tail","tail","Gain +1 Charge when you take damage","mutation"],
+  ["Kitten Tail","tail","Spawn a Charmed Kitten familiar when downed","mutation"],
+  ["Bunny Tail","tail","+1 CHA","mutation"],
+  ["Beaver Tail","tail","+1 Brace","mutation"],
+  ["Pig Tail","tail","+1 CON","mutation"],
+  ["Spiked Tail","tail","+1 Thorns","mutation"],
+  ["mermaid Tail","tail","Water does not slow movement","mutation"],
+  ["Devil Tail","tail","+1 Bleed Thorns","mutation"],
+  ["sonichu Tail","tail","Movement action is shadowstep","mutation"],
+  ["slender Tail","tail","Start with +1 Bonus Attack","mutation"],
+  ["human head tail","tail","Start with 2 backflips","mutation"],
+  ["rat tail","tail","+1 DEX","mutation"],
+  ["no tail","tail","-1 DEX","defect"],
+  ["kinked tail","tail","-2 LCK","defect"],
+  ["lipoma","tail","-1 SPD, -1 CHA","defect"],
+  ["heavy tail","tail","Start each battle with Immobile 1. +1 CON","defect"],
+  ["forked tail","tail","Hunter abilities also offered when leveling up. -2 LCK","defect"],
+];
+
+const slotColors = {
+  body:"s-body",ear:"s-ear",eyebrow:"s-eyebrow",eye:"s-eye",
+  fur:"s-fur",head:"s-head",leg:"s-leg",mouth:"s-mouth",tail:"s-tail"
+};
+const slots = ["body","ear","eyebrow","eye","fur","head","leg","mouth","tail"];
+
+let activeSlot = "all";
+let sortCol = -1;
+let sortDir = 1; // 1=asc, -1=desc
+
+function getVisible() {
+  const q = document.getElementById('srch').value.toLowerCase();
+  return data.filter(([name,slot,effect,type]) => {
+    if (activeSlot !== 'all' && slot !== activeSlot) return false;
+    if (q && !name.toLowerCase().includes(q) && !effect.toLowerCase().includes(q) && !slot.includes(q) && !type.includes(q)) return false;
+    return true;
+  });
+}
+
+function sortBy(col) {
+  if (sortCol === col) {
+    sortDir *= -1;
+  } else {
+    sortCol = col;
+    sortDir = 1;
+  }
+  document.querySelectorAll('thead th').forEach((th, i) => {
+    th.classList.remove('sort-asc','sort-desc');
+    if (i === col) th.classList.add(sortDir === 1 ? 'sort-asc' : 'sort-desc');
+  });
+  renderTable();
+}
+
+function renderTable() {
+  let rows = getVisible();
+  if (sortCol >= 0) {
+    rows = [...rows].sort((a, b) => {
+      const av = a[sortCol].toLowerCase();
+      const bv = b[sortCol].toLowerCase();
+      return av < bv ? -sortDir : av > bv ? sortDir : 0;
+    });
+  }
+  const tbody = document.getElementById('tbody');
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="no-results">No results found</td></tr>';
+    document.getElementById('cnt').textContent = 'No entries match';
+    return;
+  }
+  tbody.innerHTML = rows.map(([name,slot,effect,type]) => {
+    const isDefect = type === 'defect';
+    const defBadge = isDefect ? '<span class="defect-badge">defect</span>' : '';
+    return `<tr>
+      <td><strong style="font-weight:600">${name}</strong>${defBadge}</td>
+      <td><span class="slot-badge ${slotColors[slot]}">${slot}</span></td>
+      <td class="effect">${effect}</td>
+      <td class="type-cell">${isDefect ? 'Birth defect' : 'Mutation'}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('cnt').textContent = `Showing ${rows.length} of ${data.length} entries`;
+}
+
+// Build slot filter buttons
+const btnWrap = document.getElementById('slotBtns');
+['all', ...slots].forEach(s => {
+  const btn = document.createElement('button');
+  btn.textContent = s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1);
+  if (s === 'all') btn.classList.add('active');
+  btn.onclick = () => {
+    activeSlot = s;
+    btnWrap.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderTable();
+  };
+  btnWrap.appendChild(btn);
+});
+
+function downloadCSV() {
+  const rows = getVisible();
+  let csv = 'Name,Slot,Effect,Type\n';
+  rows.forEach(([name, slot, effect, type]) => {
+    const esc = v => '"' + v.replace(/"/g, '""') + '"';
+    csv += [esc(name), esc(slot), esc(effect), esc(type === 'defect' ? 'Birth Defect' : 'Mutation')].join(',') + '\n';
+  });
+  const blob = new Blob([csv], {type: 'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'mewgenics_mutations.csv';
+  a.click();
+}
+
+renderTable();
+</script>
+</body>
+</html>

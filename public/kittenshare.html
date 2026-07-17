@@ -1,0 +1,1457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KittenShare — Mewgenics</title>
+<meta name="description" content="Open a Mewgenics save, browse your kittens, and copy a share link to show off a cat.">
+<!-- Social preview (share-spec §3): the #k= cat payload is a URL fragment, which is
+     UNREADABLE server-side, so a crawler can never render the specific cat. We ship ONE
+     static generic branded card; the recipient's REAL cat renders client-side on load. -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="KittenShare — Mewgenics">
+<meta property="og:description" content="Share your Mewgenics cats — open a save, browse your kittens, copy a share link.">
+<meta property="og:image" content="kittenshare-og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="kittenshare-og.png">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,sans-serif;font-size:14px;color:#222;background:#f7f3ec;padding:1.5rem}
+  h1{font-size:20px;font-weight:600;margin-bottom:4px}
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .topbar h1{margin-bottom:0}
+  .discord{display:inline-flex;align-items:center;gap:6px;text-decoration:none;font-size:13px;
+    font-weight:600;color:#fff;background:#5865f2;padding:5px 10px;border-radius:8px;white-space:nowrap}
+  .discord:hover{background:#4752c4}
+  .discord svg{width:18px;height:18px;flex:none}
+  .subtitle{font-size:13px;color:#666;margin-bottom:1rem}
+  .subtitle a{color:#2d6a4f}
+  .drop{border:2px dashed #b8a88f;border-radius:12px;background:#fffdf8;padding:2.2rem;text-align:center;color:#7a6f5d;cursor:pointer;margin-bottom:1rem}
+  .drop.drag{background:#f3ecdd;border-color:#8a6f4d}
+  .drop small{display:block;margin-top:6px;color:#a89a83}
+  .hint{font-size:11.5px;color:#999;margin:-6px 0 12px}
+  code{background:#efe9dd;padding:1px 5px;border-radius:4px;font-size:12px}
+  #status{font-size:13px;color:#666;padding:6px 0;min-height:18px}
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+  /* Scoped to the search box: a bare `.controls input` also hit the internals checkbox,
+     stretching it to 220px and shoving its label far to the right. */
+  .controls input[type="search"]{padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;width:220px}
+  .wip{background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:8px;font-size:12px;padding:7px 11px;margin-bottom:12px;line-height:1.5}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+  .kcard{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:10px;display:flex;flex-direction:column;align-items:center}
+  .kcard .portrait{width:150px;height:150px}
+  /* Name row mirrors the game's banner: class emblem, name, then the ♂/♀ glyph. Both glyphs
+     are currentColor art, so they inherit the name's colour. */
+  .kcard .kname{font-weight:700;font-size:14px;margin-top:4px;display:flex;align-items:center;
+    justify-content:center;gap:5px;color:#2b2b2b;text-align:center}
+  .kcard .kemblem{width:15px;height:15px;flex:0 0 15px;display:block;opacity:.85}
+  .kcard .ksex{width:11px;height:11px;flex:0 0 11px;display:block;opacity:.7}
+  .single .kname{font-size:17px;gap:7px}
+  .single .kemblem{width:19px;height:19px;flex-basis:19px}
+  .single .ksex{width:14px;height:14px;flex-basis:14px}
+  .kcard .kmeta{font-size:11.5px;color:#777;margin-top:2px;text-align:center}
+  /* Only 'dead' is decodable; 'alive' is the default and gets no badge (and does NOT mean
+     the cat is in the house). */
+  .kcard .kroom{font-size:10.5px;color:#2d5a3d;background:#e7f3ea;border:1px solid #c2dccb;
+    border-radius:9px;padding:1px 7px;margin-top:3px;display:inline-block;line-height:1.4}
+  .kcard .kdead{font-size:10.5px;color:#6b2d2d;background:#f7e6e6;border:1px solid #e3c2c2;
+    border-radius:9px;padding:1px 7px;margin-top:3px;display:inline-block;line-height:1.4}
+  .kcard .ksize{font-size:10.5px;color:#7a4a1e;background:#fdeede;border:1px solid #f2d3ac;border-radius:9px;padding:1px 7px;margin-top:3px;display:inline-block;line-height:1.4}
+  .kcard .kitem{font-size:10.5px;color:#334;background:#eef4fb;border:1px solid #cfe0f0;border-radius:7px;padding:3px 7px;margin-top:6px;line-height:1.6;text-align:center}
+  .kcard .kitem b{color:#1d5a96;font-weight:700}
+  .kcard .kitem .islot{color:#6a7c8c}
+  /* Abilities sit BELOW the stat block, like the game's sheet, and each is a full row:
+     [real icon] name + what it does. Rows (not inline chips) because the descriptions are
+     sentences and need the width. */
+  .kcard .kabil{width:100%;margin-top:6px;display:flex;flex-direction:column;gap:3px}
+  .kcard .kabil-i{background:#eef2f7;border:1px solid #dde5ee;border-radius:8px;padding:4px 6px;
+    display:flex;align-items:flex-start;gap:5px;text-align:left;border-left:3px solid #cbd5e1}
+  /* Left edge coloured by the game's spellbook CATEGORY, matching the wiki cards. */
+  .kcard .kabil-i.cat-Offense{border-left-color:#dc2626}
+  .kcard .kabil-i.cat-Defense{border-left-color:#2563eb}
+  .kcard .kabil-i.cat-Other{border-left-color:#16a34a}
+  .kcard .kabil-i.cat-Special{border-left-color:#f59e0b}
+  .kcard .kabil-cat{width:13px;height:13px;flex:none;margin-left:auto;align-self:center;opacity:.9}
+  /* Real multi-colour game art — never tinted, unlike the mono ui-icons glyphs. */
+  .kcard .kabicon{width:18px;height:18px;flex:0 0 18px;display:block;margin-top:1px}
+  .kcard .kabil-t{min-width:0;flex:1}
+  /* Mana cost, mirroring the readout the game puts on each ability card. */
+  .kcard .kabil-mp{flex:0 0 auto;align-self:center;font-size:10px;font-weight:700;color:#2d5a8a;
+    background:#dbe7f5;border:1px solid #b9cfe6;border-radius:9px;min-width:15px;padding:0 4px;text-align:center;line-height:1.6}
+  .kcard .kabil-t b,.kcard .kabil-n{font-size:11px;color:#1d3a5c;font-weight:700;display:block;line-height:1.35}
+  .kcard .kabil-n{text-decoration:none}
+  .kcard .kabil-n:hover{text-decoration:underline}
+  .kcard .kabil-d{font-size:10.5px;color:#556;line-height:1.4;display:block}
+  /* [img:token] glyphs inline in a description — real art for the 7 stats, text badge else. */
+  .kcard .ktok{width:11px;height:11px;display:inline-block;vertical-align:-1px;color:#2b2b2b}
+  .kcard .ktokb{font-size:9px;font-weight:700;color:#41506b;background:#dde5ee;border-radius:4px;
+    padding:0 3px;letter-spacing:.02em}
+  .single .kabicon{width:22px;height:22px;flex-basis:22px}
+  .single .kabil-t b{font-size:12px}
+  .single .kabil-d{font-size:11px}
+  .kcard .unverified{font-size:10.5px;color:#8a6f2d;background:#fdf3d6;border:1px solid #f0dca0;border-radius:7px;padding:2px 7px;margin-top:5px;text-align:center;line-height:1.4}
+  .kcard .approx{font-size:10px;color:#5b6b7a;background:#eef2f7;border:1px solid #d6dee7;border-radius:7px;padding:2px 7px;margin-top:5px;text-align:center;line-height:1.35}
+  .kcard .kmut{font-size:10.5px;color:#553; background:#f3eefb;border:1px solid #e3d8f5;border-radius:7px;padding:3px 7px;margin-top:6px;line-height:1.5;text-align:center}
+  .kcard .kmut b{color:#6b3fa0;font-weight:700}
+  .kcard .kmut .mreg{color:#8a6f2d;font-weight:700}
+  .kcard .kmut .unknownmut{color:#a33}
+  /* Stat block mirrors the in-game cat sheet: the game's own FontIcon_* glyphs
+     (ui-icons.js) in two columns — STR/DEX/CON left, INT/SPD/CHA/LCK right — each
+     with its value in a paper box. */
+  .kcard .kstats{display:flex;gap:10px;margin-top:6px;width:100%;justify-content:center;
+    background:#fdfcf7;border:1px solid #e0d9c6;border-radius:8px;padding:6px 8px}
+  .kcard .kstatcol{display:flex;flex-direction:column;gap:3px}
+  .kcard .kstat{display:flex;align-items:center;gap:5px;color:#2b2b2b}
+  .kcard .kstat svg{width:15px;height:15px;flex:0 0 15px;display:block}
+  .kcard .kstat .kval{font-size:11.5px;font-weight:700;color:#2b2b2b;background:#fff;
+    border:1px solid #d5cfbc;border-radius:4px;padding:0 5px;min-width:23px;text-align:center;line-height:1.5}
+  /* Internal-values triplet: [effective][base][modifier], mirroring the in-game sheet.
+     The effective box is tinted only when a modifier actually moves it. */
+  .kcard .keff{font-size:11.5px;font-weight:700;color:#1b4332;background:#e8f5ec;
+    border:1px solid #bcd9c6;border-radius:4px;padding:0 5px;min-width:23px;text-align:center;line-height:1.5}
+  .kcard .keff.zero{color:#2b2b2b;background:#f4f2ea;border-color:#ddd6c4}
+  /* CON is the one MEASURED effective value (inverted from HP), so it reads solid rather
+     than sharing the tint the estimated stats use. */
+  .kcard .keff.exact{border-color:#7fae92;box-shadow:inset 0 0 0 1px #cfe6d8}
+  .kcard .kmod{font-size:10px;font-weight:700;min-width:20px;text-align:left}
+  .kcard .kmod.up{color:#1b7a43} .kcard .kmod.down{color:#a33} .kcard .kmod.zero{color:#aaa493}
+  .kcard .kstats.wide{gap:14px}
+  /* Honest caption: the reconstructed modifier can't see level/trait bonuses. */
+  .kcard .kpartial{font-size:9.5px;color:#8a6f2d;background:#fdf3d6;border:1px solid #f0dca0;
+    border-radius:6px;padding:2px 6px;margin-top:4px;text-align:center;line-height:1.35}
+  .controls .tgl{display:flex;align-items:center;gap:5px;font-size:12px;color:#666;cursor:pointer;user-select:none}
+  .controls .tgl input{cursor:pointer}
+  /* Fallback if ui-icons.js is unavailable — never leave a value unlabelled. */
+  .kcard .kstat .kfb{font-size:9.5px;font-weight:700;color:#8a8272;width:15px;flex:0 0 15px;text-align:center}
+  /* HP/MP/level are NOT in the game's 7-stat grid, so they sit on their own line. */
+  .kcard .kstats-x{display:flex;flex-wrap:wrap;justify-content:center;gap:3px;margin-top:4px}
+  .kcard .kstats-x .stat{font-size:10.5px;color:#444;background:#f1efe7;border-radius:6px;padding:1px 6px}
+  .kcard .kstats-x .stat b{color:#2d6a4f;font-weight:700}
+  /* MP is computed from CHA, not read from the save — the ≈ marks it as derived so it is
+     never read as a decoded value sitting next to the decoded HP. */
+  .kcard .kstats-x .stat.derived{background:#eef2f7;color:#41506b}
+  .kcard .kstats-x .stat.derived b{color:#41506b}
+  .kcard .kstats-x .stat.derived i{font-style:normal;color:#8a93a6}
+  .share-btn{margin-top:8px;padding:5px 14px;font-size:12px;border:none;border-radius:14px;background:#2d6a4f;color:#fff;cursor:pointer}
+  .share-btn:hover{background:#1b4332}
+  .share-btn.copied{background:#7e3af2}
+  .single{max-width:420px;margin:0 auto}
+  .single .portrait{width:260px;height:260px}
+  .no-results{text-align:center;color:#999;padding:2rem;font-style:italic}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>🐾 KittenShare</h1>
+  <a class="discord" href="https://discord.gg/funsmithclub" target="_blank" rel="noopener noreferrer"
+     title="Join the Funsmith Club Discord">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20.317 4.3698a19.7913 19.7913 0 0 0-4.8851-1.5152.0741.0741 0 0 0-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 0 0-.0785-.037 19.7363 19.7363 0 0 0-4.8852 1.515.0699.0699 0 0 0-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 0 0 .0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 0 0 .0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 0 0-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 0 1-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 0 1 .0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 0 1 .0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 0 1-.0066.1276 12.2986 12.2986 0 0 1-1.873.8914.0766.0766 0 0 0-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 0 0 .0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 0 0 .0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 0 0-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189z"/></svg>
+    <span>Funsmith Club</span>
+  </a>
+</div>
+<p class="subtitle">Open a Mewgenics save, browse your kittens, share a link · <a href="index.html">← all tools</a></p>
+
+<div id="shareView" style="display:none"></div>
+
+<div id="openView">
+  <div class="drop" id="drop">📂 Drop your <b>.sav</b> file here or click to browse
+    <small>Saves live in <code>%APPDATA%\Glaiel Games\Mewgenics\&lt;steam-id&gt;\saves\</code> — files are read locally, nothing is uploaded.</small>
+  </div>
+  <input type="file" id="file" accept=".sav,.savbackup" style="display:none">
+  <!-- DEV ONLY: loads public/__demo.sav (gitignored). Shown only on localhost — never on the
+       deployed site (and the file isn't published there anyway). -->
+  <button id="devLoad" style="display:none;margin-top:8px;font-size:12px;padding:5px 10px;border:1px dashed #b8a88f;border-radius:8px;background:#fffdf8;color:#7a6f5d;cursor:pointer">🛠 dev: load __demo.sav</button>
+  <div class="wip">🐾 <b>Names, stats and appearance are decoded from your save.</b> Stats (7 core + HP) are real,
+    verified values. Portraits now use each cat's <b>real</b> data: the game's own idle-pose rig (from
+    <code>catanis.swf</code>), the cat's <b>real coat color</b> (its palette row), and its <b>real fur pattern</b>
+    (tabby/spots/stripes — the <code>CatTexture</code> sheet, tinted to the coat and clipped to each part).
+    One approximation remains: SVG can't do the game's per-pixel UV sampling, so stripes render straight rather
+    than wrapped to the body contour, but they read correctly as the cat's markings. Cats from an unrecognized
+    build, or whose genes fail the range/symmetry check, render a neutral base kitten labelled
+    "appearance unverified".</div>
+  <div id="status"></div>
+  <div class="controls" id="controls" style="display:none">
+    <input type="search" id="srch" placeholder="Search kittens…" oninput="renderCards()">
+    <label class="tgl" id="houseTgl" style="display:none" title="Show only the cats currently living in your house. The save's cat table holds every cat that ever existed — ancestors, the dead, the long gone — so this filters to the roster in house_state.">
+      <input type="checkbox" id="houseOnly" onchange="renderCards()"> in the house only
+    </label>
+    <label class="tgl" title="Show the game's [effective | base | modifier] stat triplet. The modifier is reconstructed from the sources we decode (mutations + equipped items) — it is PARTIAL and will disagree with in-game wherever level or trait bonuses apply.">
+      <input type="checkbox" id="internals" onchange="renderCards()"> show internal values
+    </label>
+    <span id="cnt" style="font-size:12px;color:#888"></span>
+  </div>
+  <div class="cards" id="cards"></div>
+</div>
+
+<script src="vendor/sql-wasm.js"></script>
+<script src="vendor/lz4.js"></script>
+<script src="vendor/lz-string.min.js"></script>
+<!-- parts.js/patterns.js (the eager corpus-union monolith, ~4.4 MB) are NO LONGER
+     loaded here. The LOCAL browse view fetch+evals them on demand (loadMonolith, in
+     openSave); the STANDALONE shared card fetches only the ~12 range chunks it needs
+     (loadNeededParts). Both paths merge into the same CAT_PARTS/CAT_TEXTURES/HEAD_SOCKETS
+     globals declared at the top of the inline script below (locked decision D3, AST-01). -->
+<script src="kittenshare/palettes.js"></script>
+<script src="kittenshare/palette-lut.js"></script>
+<script src="kittenshare/ability-ids.js"></script>
+<script src="kittenshare/mutations-catalog.js"></script>
+<script src="kittenshare/ui-icons.js"></script>
+<script src="kittenshare/ability-categories.js"></script>
+<script src="kittenshare/item-ids.js"></script>
+<!-- items.js (worn-item art, ~9 MB) is lazy-loaded by loadMonolith(), never eager. -->
+<script src="kittenshare/save-decode.js"></script>
+<script>
+// ---------- asset globals + on-demand loaders (AST-01) ----------
+// The puppet asset tables. Both the local browse view and the standalone shared card
+// MERGE into these same objects (via Object.assign), so the renderer reads one shape no
+// matter which path filled it. They start empty — neither the eager monolith nor any
+// chunk is fetched at page load, so a shared-link recipient downloads only what their
+// one cat needs (a few hundred KB) instead of the ~4.4 MB corpus monolith.
+var CAT_PARTS = {}, HEAD_SOCKETS = {}, CAT_TEXTURES = {}, ITEM_SPRITES = {};
+// Ability display names + real icon art (lazy, see loadMonolith). Empty until then, so every
+// reader must tolerate a miss and fall back to the raw decoded id.
+// The icons are a uniform sheet, so ONE viewBox fits them all; the asset ships the measured
+// value and this is the same box as a standalone default (a `null` here would render
+// viewBox="null" and blank every icon, so it is seeded, not left empty).
+var ABILITY_INFO = {}, ABILITY_ART = {}, ABILITY_VIEWBOX = '-3 -2 71 64';
+
+// SLOT LABEL -> catparts.swf render sprite. Legs share one sprite (posed by rig skew);
+// Eye/Ear/Brow are L/R-symmetric but each maps to its sprite. Kept inside the resolver
+// marker block so tools/asset-export.test.js can lift the pure resolver verbatim.
+/* @resolver-start */
+const SLOT_TO_SPRITE = {
+  Body: 'CatBody', Head: 'CatHead', Tail: 'CatTail',
+  RearLeg_L: 'CatLeg', RearLeg_R: 'CatLeg', FrontLeg_L: 'CatLeg', FrontLeg_R: 'CatLeg',
+  Eye_L: 'CatEye', Eye_R: 'CatEye', Brow_L: 'CatEyebrow', Brow_R: 'CatEyebrow',
+  Ear_L: 'CatEar', Ear_R: 'CatEar', Mouth: 'CatMouth'
+};
+// PURE resolver: given a cat's slot frames + pattern id and the two manifests, return the
+// exact set of chunk files to fetch. For each sprite we union the referenced frame PLUS
+// frame 0 (partSvg's box-frame guard always falls back to frame 0), map each to its
+// manifest range, and dedupe. No DOM, no fetch — so it is unit-tested in Node. Chunk file
+// names come ONLY from the trusted same-origin manifest (fixed <Sprite>/<lo>-<hi>.json),
+// and frames are integer-coerced range selectors — never concatenated into a path (T-02-07).
+function resolveChunks(slots, pattern, partsManifest, patternsManifest) {
+  const need = {}; // sprite -> Set(frame)
+  for (const label in SLOT_TO_SPRITE) {
+    const sprite = SLOT_TO_SPRITE[label];
+    const v = slots ? slots[label] : 0;
+    const f = (Number.isInteger(v) && v >= 0) ? v : 0;
+    (need[sprite] = need[sprite] || new Set()).add(f).add(0);
+  }
+  const partFiles = new Set();
+  for (const sprite in need) {
+    const ranges = (partsManifest && partsManifest.slots && partsManifest.slots[sprite]) || [];
+    need[sprite].forEach(f => {
+      for (const r of ranges) if (f >= r.lo && f <= r.hi) { partFiles.add(r.file); break; }
+    });
+  }
+  const patternFiles = new Set();
+  const pv = (Number.isInteger(pattern) && pattern >= 0) ? pattern : null;
+  if (pv != null) {
+    const ranges = (patternsManifest && patternsManifest.slots && patternsManifest.slots.CatTexture) || [];
+    for (const r of ranges) if (pv >= r.lo && pv <= r.hi) { patternFiles.add(r.file); break; }
+  }
+  return { partFiles: [...partFiles].sort(), patternFiles: [...patternFiles].sort() };
+}
+/* @resolver-end */
+
+// STANDALONE shared-card path: fetch the manifests + head sockets once (memoized), resolve
+// the ~12 chunks this cat references, fetch them, and Object.assign into the globals. The
+// renderer then runs UNCHANGED. Never used by the local browse view (D3).
+let __manifestsP = null;
+function loadManifests() {
+  if (!__manifestsP) __manifestsP = Promise.all([
+    fetch('kittenshare/parts/manifest.json').then(r => r.json()),
+    fetch('kittenshare/patterns/manifest.json').then(r => r.json()),
+    fetch('kittenshare/parts/head-sockets.json').then(r => r.json())
+  ]);
+  return __manifestsP;
+}
+async function loadNeededParts(slots, pattern) {
+  const [partsMan, patternsMan, sockets] = await loadManifests();
+  Object.assign(HEAD_SOCKETS, sockets);                 // full head-socket coverage (tiny, eager)
+  const { partFiles, patternFiles } = resolveChunks(slots, pattern, partsMan, patternsMan);
+  const jobs = [];
+  for (const file of partFiles) {
+    const sprite = file.split('/')[0];
+    jobs.push(fetch('kittenshare/parts/' + file).then(r => r.json()).then(obj => {
+      const dst = (CAT_PARTS[sprite] = CAT_PARTS[sprite] || { frames: {}, totalFrames: 0 });
+      dst.frames = dst.frames || {};
+      Object.assign(dst.frames, obj);
+    }));
+  }
+  for (const file of patternFiles) {
+    jobs.push(fetch('kittenshare/patterns/' + file).then(r => r.json()).then(obj => {
+      Object.assign(CAT_TEXTURES, obj);
+    }));
+  }
+  await Promise.all(jobs);
+}
+
+// LOCAL browse view path: fetch+eval the eager corpus-union monolith (parts.js/patterns.js)
+// ONCE, then merge into the globals. fetch+eval (not a <script> tag) so the standalone
+// recipient never downloads it, and so the monolith's `const CAT_PARTS = …` stays function-
+// scoped inside new Function() and cannot collide with the page's `var CAT_PARTS`. parts.js
+// is trusted same-origin own code; its `typeof module`/`typeof global` shim is inert here.
+let __monoP = null;
+function loadMonolith() {
+  if (!__monoP) __monoP = Promise.all([
+    fetch('kittenshare/parts.js').then(r => r.text()),
+    fetch('kittenshare/patterns.js').then(r => r.text()),
+    // items.js is large (worn-item art) and OPTIONAL — its failure must never block the
+    // portrait. Fetch it here (once, with parts/patterns) but tolerate a miss: a cat still
+    // renders, just without equipped items. NOT an eager <script> tag (that 9 MB blocking
+    // load could stall or OOM the page before openSave even ran).
+    fetch('kittenshare/items.js').then(r => r.ok ? r.text() : '').catch(() => ''),
+    // ability-icons.js is the same deal (~6.8 MB of real ability art + the id->display-name
+    // vocab). Optional and lazy for the same reason: without it the card still lists the
+    // cat's abilities, just as plain ids instead of named icons.
+    fetch('kittenshare/ability-icons.js').then(r => r.ok ? r.text() : '').catch(() => '')
+  ]).then(([pText, ptText, itText, abText]) => {
+    const p = (new Function(pText + '\nreturn { CAT_PARTS, HEAD_SOCKETS };'))();
+    const pt = (new Function(ptText + '\nreturn { CAT_TEXTURES };'))();
+    Object.assign(CAT_PARTS, p.CAT_PARTS);
+    Object.assign(HEAD_SOCKETS, p.HEAD_SOCKETS);
+    Object.assign(CAT_TEXTURES, pt.CAT_TEXTURES);
+    if (itText) { try { const it = (new Function(itText + '\nreturn { ITEM_SPRITES };'))(); Object.assign(ITEM_SPRITES, it.ITEM_SPRITES); } catch (e) { /* items optional */ } }
+    if (abText) { try { const ab = (new Function(abText + '\nreturn { ABILITY_INFO, ABILITY_ART, ABILITY_VIEWBOX };'))(); Object.assign(ABILITY_INFO, ab.ABILITY_INFO); Object.assign(ABILITY_ART, ab.ABILITY_ART); ABILITY_VIEWBOX = ab.ABILITY_VIEWBOX || ABILITY_VIEWBOX; } catch (e) { /* abilities degrade to ids */ } }
+  });
+  return __monoP;
+}
+
+// The ability VOCAB (names/descriptions/mana) — small (~240 KB), separate from the ~6.6 MB icon
+// art in ability-icons.js. The browse view gets ABILITY_INFO for free from loadMonolith (which
+// loads the full art file); the STANDALONE share card must load this so a shared link shows real
+// ability details (name + description + mana) without pulling the icon-art megabytes. Icons then
+// stay a lazy extra. A miss is non-fatal: abilities simply degrade to their raw ids, as before.
+let __abInfoP = null;
+function loadAbilityInfo() {
+  if (!__abInfoP) __abInfoP = fetch('kittenshare/ability-info.js')
+    .then(r => r.ok ? r.text() : '')
+    .then(t => { if (t) { try { const m = (new Function(t + '\nreturn { ABILITY_INFO, ABILITY_VIEWBOX };'))(); Object.assign(ABILITY_INFO, m.ABILITY_INFO); ABILITY_VIEWBOX = m.ABILITY_VIEWBOX || ABILITY_VIEWBOX; } catch (e) { /* abilities degrade to ids */ } } })
+    .catch(() => {});
+  return __abInfoP;
+}
+// The real ability ICON art, loaded PER FRAME so a shared card pulls only the ~8 icons its
+// abilities use (~70 KB), never the 6.6 MB monolith. Each icon file is named by its ABILITY_INFO
+// key (k+f). Needs ABILITY_INFO first (to resolve id -> frame). A missing icon is fine — the
+// chip just shows name + description without art. Full-colour game art; not tinted.
+const __abArtLoaded = {};
+async function loadAbilityArt(ids) {
+  const want = new Set();
+  for (const id of (ids || [])) {
+    const info = ABILITY_INFO[id];
+    if (info && info.f !== undefined) { const key = info.k + info.f; if (!__abArtLoaded[key]) want.add(key); }
+  }
+  await Promise.all([...want].map(key => {
+    __abArtLoaded[key] = 1;
+    return fetch(`kittenshare/ability-icons/${key}.json`)
+      .then(r => r.ok ? r.json() : null)
+      .then(art => { if (art) ABILITY_ART[key] = art; })
+      .catch(() => {});                       // missing icon -> name+desc only, never a failure
+  }));
+}
+
+// ---------- puppet renderer ----------
+// Compose a cat portrait from CAT_PARTS + HEAD_SOCKETS, posed with the REAL
+// catanis.swf idle rig (CAT_RIG_FRONT), tinted with the cat's REAL coat COLOR
+// (genes.coatPalette -> palette.png row via the 16-col LUT), and overlaid with its
+// REAL fur PATTERN (genes.pattern -> CAT_TEXTURES frame, masked per part, same coat
+// LUT). Only approximation: SVG can't UV-wrap the texture, so stripes render straight.
+
+// SVG matrix(a b c d e f) = (sx r0 r1 sy tx ty). Emit ALL SIX components: the rig
+// layers carry rotation/skew (r0/r1) and the ~0.621 idle scale that the old matStr
+// (which hardcoded "0 0" and dropped the scale) silently discarded — losing the tail
+// rotation and every per-leg skew. Head sockets carry no r0/r1, so they default to 0.
+function matStr(m){
+  const sx = m.sx==null?1:m.sx, sy = m.sy==null?1:m.sy;
+  return `matrix(${sx} ${m.r0||0} ${m.r1||0} ${sy} ${m.tx||0} ${m.ty||0})`;
+}
+
+// Idle-pose rig extracted from catanis.swf CatTest (frame0 = idleF keyframe, the rest
+// pose), layers back-to-front by SWF depth (== SerializeCatData slot order). Legs reuse
+// one CatLeg sprite (L/R differ by skew). groupOffset places the whole puppet; the Head
+// layer wraps CatHead + the head sockets. NOT hand-tuned — matrices are from the SWF.
+const CAT_RIG_FRONT = {
+  groupOffset: { sx:1, r0:0, r1:0, sy:1, tx:3.85, ty:-47.95 },
+  viewBox: '-80 -100 170 135',
+  layers: [
+    { slot:'Tail',       sprite:'CatTail', matrix:{ sx:0.59964,  r0:0.162415, r1:-0.162415, sy:0.59964,  tx:-24.45, ty:10.05 } },
+    // Leg layers: the catanis instance NAMES (leg2, arm2, leg1, arm1 in depth order)
+    // give the true slot — Mewgenics calls FRONT legs "arm" and REAR legs "leg". The
+    // original rig mislabeled them by raw depth order (arm2->RearLeg_R, leg1->FrontLeg_L),
+    // scrambling front/rear so arms landed by the tail. Positions/draw-order are unchanged;
+    // only each layer's decoded-slot binding is corrected. (1=near side, 2=far side.)
+    { slot:'RearLeg_R',  sprite:'CatLeg',  matrix:{ sx:0.621262, r0:0,        r1:-0.047958, sy:0.621262, tx:-9.85,  ty:23.65 } },  // catanis 'leg2' (far rear)
+    { slot:'FrontLeg_R', sprite:'CatLeg',  matrix:{ sx:0.621262, r0:0,        r1:0,         sy:0.621262, tx:17.15,  ty:32.45 } },  // catanis 'arm2' (far front, by head)
+    { slot:'Body',       sprite:'CatBody', matrix:{ sx:0.621307, r0:0.004456, r1:-0.01178,  sy:0.621109, tx:-0.4,   ty:16.35 } },
+    { slot:'RearLeg_L',  sprite:'CatLeg',  matrix:{ sx:0.621262, r0:0,        r1:-0.088364, sy:0.621262, tx:-32.1,  ty:27.1  } },  // catanis 'leg1' (near rear, by tail)
+    { slot:'FrontLeg_L', sprite:'CatLeg',  matrix:{ sx:0.621262, r0:0,        r1:0,         sy:0.621262, tx:-4.7,   ty:37.25 } },  // catanis 'arm1' (near front)
+    { slot:'Head',       sprite:'CatHead', matrix:{ sx:0.621262, r0:0,        r1:0,         sy:0.621262, tx:10.95,  ty:2.3   } }
+  ]
+};
+
+const NEUTRAL_COAT = 18; // neutral gray fallback palette row for unverified cats
+
+// Textured body parts are exported as a rectangular texture image CLIPPED by a mask to
+// the part silhouette. Exactly 11 union frames export without that mask (empty defs) and
+// so would render as a solid filled rectangle (the "box"). These are NOT a mask-extraction
+// bug — the master catparts.swf timeline genuinely has no clip mask on those frames (they
+// are Flash held/default frames, e.g. CatLeg 250, CatBody 324; their per-frame silhouette
+// lives in frame-synced graphic child layers that the frame-0 renderer does not replicate —
+// a rig-level Phase-2 change). See docs/kittenshare-format-notes.md "Textured box-frame
+// investigation". This guard is the correct, permanent handling: fall back to the masked
+// default frame 0 so the cat shows a real (if generic) part. Small painted features (eyes,
+// brows, mouths) are legitimately maskless, so the guard only applies to these textured slots.
+const TEXTURED_SLOTS = { CatBody:1, CatHead:1, CatTail:1, CatLeg:1, CatEar:1 };
+let __maskUID = 0;
+function partSvg(slot, frame){
+  const p = CAT_PARTS[slot]; if(!p) return {defs:'',body:''};
+  // per-slot lookup; a missing/out-of-range decoded frame falls back to the part's
+  // default frame 0 (the base-kitten look) — never injects markup (T-06-01).
+  let f = p.frames[frame] || p.frames[0];
+  // Box-frame guard: a maskless textured frame renders as a solid rectangle. Fall back to
+  // the masked default frame 0 so the cat shows a real (if generic) part, never a box.
+  // (These 11 frames are genuinely maskless in catparts.swf — not an extraction bug; true
+  // per-frame silhouettes need frame-synced graphic rendering, Phase-2 rig scope.)
+  if(f && TEXTURED_SLOTS[slot] && !f.defs && p.frames[0] && p.frames[0].defs && f !== p.frames[0]){
+    f = p.frames[0];
+  }
+  if(!f) return {defs:'',body:''};
+  if(!f.defs) return f;
+  // Namespace this instance's mask/clip ids. Frames reuse ids like "mask626", and a cat
+  // composes ~14 parts into ONE svg — duplicate ids make the browser resolve url(#id) to
+  // the FIRST match, so a later part gets the wrong mask and fills its bounding box (the
+  // "cream rectangle" body bug). Suffix every id per instance so they can never collide.
+  const ids = [...new Set((f.defs.match(/id="([^"]+)"/g) || []).map(s => s.slice(4, -1)))];
+  if(!ids.length) return f;
+  const suf = '_u' + (__maskUID++);
+  let defs = f.defs, body = f.body;
+  for(const id of ids){
+    // exact, delimiter-bounded swaps (id="X", #X), #X") — prefix-safe (mask62 ≠ mask626)
+    defs = defs.split('id="' + id + '"').join('id="' + id + suf + '"');
+    defs = defs.split('#' + id + ')').join('#' + id + suf + ')');
+    defs = defs.split('#' + id + '"').join('#' + id + suf + '"');
+    body = body.split('#' + id + ')').join('#' + id + suf + ')');
+    body = body.split('#' + id + '"').join('#' + id + suf + '"');
+  }
+  return {defs, body};
+}
+
+// Namespace the mask/gradient ids in an injected {defs,body} pair per instance — the
+// same collision fix partSvg applies. A cat composites ~14 parts + up to 6 texture
+// overlays into ONE <svg>; duplicate ids (mask0/gradient1) would make the browser
+// resolve url(#id) to the FIRST match and mis-clip. Reused verbatim for pattern frames.
+function namespaceIds(defs, body){
+  const ids = [...new Set((defs.match(/id="([^"]+)"/g) || []).map(s => s.slice(4, -1)))];
+  if(!ids.length) return {defs, body};
+  const suf = '_u' + (__maskUID++);
+  for(const id of ids){
+    defs = defs.split('id="' + id + '"').join('id="' + id + suf + '"');
+    defs = defs.split('#' + id + ')').join('#' + id + suf + ')');
+    defs = defs.split('#' + id + '"').join('#' + id + suf + '"');
+    body = body.split('#' + id + ')').join('#' + id + suf + ')');
+    body = body.split('#' + id + '"').join('#' + id + suf + '"');
+  }
+  return {defs, body};
+}
+// The fur PATTERN texture frame (CatTexture frame index = genes.pattern) as a namespaced
+// {defs,body}, or null when the pattern id was not exported into CAT_TEXTURES (rare
+// patterns outside the corpus-union set) — the caller then skips the overlay (solid fur).
+function texSvg(pattern){
+  const t = (typeof CAT_TEXTURES !== 'undefined') ? CAT_TEXTURES[pattern] : null;
+  if(!t) return null;
+  return namespaceIds(t.defs || '', t.body || '');
+}
+function renderPortrait(cat){
+  // Pose every slot with its OWN decoded frame and tint with the cat's REAL coat
+  // color, but only when the decoder verified the appearance (recognized build AND
+  // genes located AND range/L-R symmetry AND coatPalette in [1,49]). On the fallback
+  // branch genes are null → every slot renders its default frame 0 (neutral base
+  // kitten) tinted a neutral gray, and the card labels it "unverified" — never a
+  // wrong look, never a fabricated coat.
+  const verified = !!(cat && cat.appearanceVerified && cat.genes && cat.genes.slots);
+  const slots = verified ? cat.genes.slots : null;
+  // Fur color: the game recolors a CLASSED cat's whole coat to its CLASS palette
+  // (genes.classPalette, base+12, rows ~50-68). Only Colorless/classless cats
+  // (classPalette -1) show their genetic coatPalette (base+8, rows 1-49). E.g. a
+  // Tinkerer decodes coatPalette 25 (gray) but classPalette 63 (mint) and renders MINT.
+  const clsPal = (verified && Number.isInteger(cat.genes.classPalette)) ? cat.genes.classPalette : -1;
+  const cp = !verified ? NEUTRAL_COAT
+           : (clsPal >= 0 && clsPal < 100 && typeof CAT_PALETTE_LUT16 !== 'undefined' && CAT_PALETTE_LUT16[clsPal]) ? clsPal
+           : Number.isInteger(cat.genes.coatPalette) ? cat.genes.coatPalette : NEUTRAL_COAT;
+  const lut  = (typeof CAT_PALETTE_LUT16 !== 'undefined' && (CAT_PALETTE_LUT16[cp] || CAT_PALETTE_LUT16[NEUTRAL_COAT])) || null;
+  const tone = (typeof CAT_PALETTE_TONE4 !== 'undefined' && (CAT_PALETTE_TONE4[cp] || CAT_PALETTE_TONE4[NEUTRAL_COAT])) || ['#999','#bbb','#777','#ddd'];
+  // frame for a slot label: decoded value when verified, else 0 (default).
+  // A slot's frame, or null when the part is REMOVED.
+  //
+  // 0xFFFFFFFE/0xFFFFFFFF are the game's "this part is gone" sentinels (no-tail, anophthalmia,
+  // browless…). They are valid ints, so the old code passed them straight through as a frame
+  // number; the lookup then missed and partSvg fell back to FRAME 0 — drawing the DEFAULT part.
+  // That is why Ferb, whose tail is removed, sprouted a stock tail behind him. It hit 257 of
+  // 1298 cats (60 tails, 92 ear pairs, 76 brows, 41 mouths, 30 eyes). A removed part must
+  // render NOTHING, so callers skip a null.
+  const SLOT_GONE = new Set([0xFFFFFFFE, 0xFFFFFFFF]);
+  function fr(label){
+    const v = slots ? slots[label] : 0;
+    if (!Number.isInteger(v) || v < 0) return 0;
+    if (SLOT_GONE.has(v >>> 0)) return null;
+    return v;
+  }
+  // Fur PATTERN (tabby/spots/stripes): genes.pattern is a CatTexture frame index.
+  //
+  // Every part paints its fur as ONE flat grey rect (catparts shape 593) that Flash has
+  // ALREADY clipped to that part's silhouette via a mask layer, with the outlines and any
+  // painted art as LATER siblings on top. CatTexture's plain frame places that very same
+  // shape at the very same matrix — the rect is a placeholder the tile drops into. So the
+  // game applies a pattern by SUBSTITUTING the tile for that rect, not by compositing a
+  // layer over the part. The exporter marks the rect with data-fur="1" (all 715 fur frames
+  // carry exactly one); we swap the tile in for it. The part's own mask then clips the tile
+  // to the silhouette and the linework still draws over it, for free.
+  //
+  // This supersedes an overlay attempt that erased linework, and a mix-blend-mode:multiply
+  // attempt that darkened whole coats to near-black. Both modelled a blend the engine does
+  // not do: shaders/paletted_full.shader only maps grey -> palettemap[round(r*15+0.5)] and
+  // keeps non-grey as-is, so the tile is just another greyscale sprite through the same
+  // lookup — which is why it must stay rgb() here and go through tintGrays like the rect it
+  // replaces. Proof the model is right: substituting the PLAIN pattern is a visual no-op,
+  // because plain IS the placeholder rect.
+  const pattern = (verified && cat.genes && Number.isInteger(cat.genes.pattern) &&
+    typeof CAT_TEXTURES !== 'undefined' && CAT_TEXTURES[cat.genes.pattern]) ? cat.genes.pattern : null;
+  let defs = '', out = '';
+  const FUR_RE = /<g data-fur="1"[^>]*>[\s\S]*?<\/g>/;
+  function applyFurPattern(body){
+    if (pattern == null || !FUR_RE.test(body)) return body;
+    const tex = texSvg(pattern);
+    if (!tex) return body;
+    defs += tex.defs;
+    return body.replace(FUR_RE, tex.body);
+  }
+  // Each rig slot's CONTENT, keyed by slot, with NO matrix baked in. The static pose wraps each
+  // in its rig matrix; an idle ANIMATION re-emits the same content under a different matrix (and
+  // a different layer ORDER) every frame, without re-rendering any part.
+  const slotContent = {};
+  function place(slot, sprite, frame, m){
+    const p = partSvg(sprite, frame); defs += p.defs;
+    // No slot list needed: the art says which parts are furred. Exactly the 5 furred sprites
+    // (Body/Head/Tail/Leg/Ear) carry a fur rect on every frame; eyes/brows/mouth carry none,
+    // so applyFurPattern is inherently a no-op for them.
+    slotContent[slot] = applyFurPattern(p.body);
+    out += `<g transform="${matStr(m)}">${slotContent[slot]}</g>`;
+  }
+  // Worn item art (crowns/hats/masks/collars). Look up the ITEM_SPRITES frame by the
+  // item's `frame`, namespace its mask ids (like parts), and return {defs,body} or null.
+  function itemSvg(sprite, frame){
+    if (typeof ITEM_SPRITES === 'undefined' || !ITEM_SPRITES[sprite]) return null;
+    const f = ITEM_SPRITES[sprite].frames[frame];
+    if (!f) return null;
+    // Items carry their OWN colors (a gold crown, a silver mask) — they must NOT be
+    // recolored by the coat palette. tintGrays only rewrites fill/stroke="rgb(...)", so
+    // convert item rgb() colors to #hex, which it leaves untouched. Item art thus renders
+    // in its true colors regardless of the cat's coat.
+    const toHex = s => s.replace(/(fill|stroke)="rgb\((\d+),\s*(\d+),\s*(\d+)\)"/g,
+      (m, a, r, g, b) => `${a}="#${[r,g,b].map(x => (+x).toString(16).padStart(2,'0')).join('')}"`);
+    const ns = f.defs ? namespaceIds(f.defs, f.body) : { defs:'', body:f.body };
+    return { defs: toHex(ns.defs), body: toHex(ns.body) };
+  }
+  // The cat's equipped item for a given kind (head/face/neck), or null.
+  function equippedItem(kind){
+    const its = (cat && Array.isArray(cat.items)) ? cat.items : [];
+    for (const it of its) if (it.kind === kind) return it;
+    return null;
+  }
+  // Render a worn item at a head-local socket ({tx,ty,sx,sy}); '' if no item/socket/art.
+  function itemAtSocket(kind, sprite, socket){
+    if (!socket) return '';
+    const it = equippedItem(kind); if (!it) return '';
+    const s = itemSvg(sprite, it.frame); if (!s) return '';
+    defs += s.defs;
+    const sx = socket.sx==null?1:socket.sx, sy = socket.sy==null?1:socket.sy;
+    return `<g transform="matrix(${sx} 0 0 ${sy} ${socket.tx||0} ${socket.ty||0})">${s.body}</g>`;
+  }
+  // Head is a GROUP: CatHead + the ear/eye/brow/mouth sockets in CatHead-local coords
+  // (exactly as before), wrapped in the rig's Head-layer matrix — this REPLACES the
+  // old hand-tuned matrix(1 0 0 1 0 -34) head offset.
+  function headGroup(m){
+    const headFrame = fr('Head');
+    const sock = HEAD_SOCKETS[headFrame] || {};
+    let h = '';
+    const hp = partSvg('CatHead', headFrame); defs += hp.defs;
+    // Head item BACK half (behind the head), then ears, then the head itself.
+    h += itemAtSocket('head', 'HeadItemB', sock.headItem);
+    if (sock.earL && fr('Ear_L') !== null) { const e=partSvg('CatEar',fr('Ear_L')); defs+=e.defs; h+=`<g transform="${matStr(sock.earL)}">${applyFurPattern(e.body)}</g>`; }
+    if (sock.earR && fr('Ear_R') !== null) { const e=partSvg('CatEar',fr('Ear_R')); defs+=e.defs; h+=`<g transform="${matStr(sock.earR)}">${applyFurPattern(e.body)}</g>`; }
+    // The pattern is substituted INTO the head's own fur rect, so it sits under the head's
+    // linework automatically and the eye/brow/mouth sockets appended below still stay on top.
+    h += applyFurPattern(hp.body);
+    // Eyes have their OWN colors (white eyeball, e.g. baby-BLUE iris, black pupil) and must
+    // NOT be recolored by the coat palette — otherwise a light-blue iris (rgb 191,204,207,
+    // low spread) gets read as "gray" and tinted to the coat (e.g. pink on Ernie). Convert
+    // eye rgb() -> #hex so tintGrays (which only rewrites rgb()) leaves eye colors intact.
+    const eyeHex = s => s.replace(/(fill|stroke)="rgb\((\d+),\s*(\d+),\s*(\d+)\)"/g,
+      (m, a, r, g, b) => `${a}="#${[r,g,b].map(x => (+x).toString(16).padStart(2,'0')).join('')}"`);
+    // The eye anchor's ~0.5 scale is the PLACEHOLDER CONTAINER's scale, not the eye's. That
+    // container (charId 10993/10999) holds a 10-unit registration dot plus a MISSING char
+    // (10992/10998) — the runtime insertion point where the game drops the real CatEye, placed
+    // at sx=1. So the eye draws at its NATIVE authored size; only the anchor's POSITION and its
+    // sx SIGN (which mirrors the right eye) belong to it. Applying the container's 0.514 made
+    // eyes half-size, which the old EYE_SCALE=3.0 fudge then overshot to 1.54x — hence eyes
+    // that read too big. CatEye art is centred (frame 326 bounds x[-17.5,14.7], ~32 wide), so
+    // at native scale the pair sits at +-31 with a proper gap, matching in-game.
+    function eyeGroup(so, body){
+      const mir = (so.sx != null && so.sx < 0) ? -1 : 1;
+      return `<g transform="matrix(${mir} 0 0 1 ${so.tx||0} ${so.ty||0})">${eyeHex(body)}</g>`;
+    }
+    // FACE ORDER: mouth first, then both eyes, then brows.
+    //
+    // Do NOT order these by the CatHeadPlacements depth. That sprite is ANCHOR DATA (hence
+    // "Placements") — the game reads its matrices and composites the real parts in its own
+    // fixed order, so the depths are just how the guide file happens to be stacked. Two facts
+    // prove depth is not z: the item anchors sit at 82/86/90 on EVERY head even when the whole
+    // face re-rigs (62/66/70 on a plain head -> 54/58/62 on the sloth head 705); and depth
+    // order would put headItem(82) BEHIND neckItem(90), i.e. a hat under a collar, whereas the
+    // reverse order we actually draw is visually verified on real cats.
+    //
+    // Depth also can't be read as "mouth between the eyes": 1401 of 1505 frames carry only ONE
+    // L placeholder, so the eyeL(62) < mouth(66) < eyeR(70) reading generalised from frame 0,
+    // the single frame with a second pair. In game BOTH eyes are in front of the mouth.
+    const push = (so, slot, sprite, draw) => {
+      if (!so || fr(slot) === null) return;
+      const p = partSvg(sprite, fr(slot)); defs += p.defs;
+      h += draw(so, p.body);
+    };
+    push(sock.mouth, 'Mouth', 'CatMouth', (so, b) => `<g transform="matrix(1 0 0 1 ${so.tx} ${so.ty})">${b}</g>`);
+    push(sock.eyeL, 'Eye_L', 'CatEye', (so, b) => eyeGroup(so, b));
+    push(sock.eyeR, 'Eye_R', 'CatEye', (so, b) => eyeGroup(so, b));
+    // Brows share the EYE's anchor, so they take the same native-scale rule (the anchor's ~0.5
+    // is the placeholder container's, not the part's) — drawing them at 0.514 made them half
+    // size. They also need a LIFT the anchor does not carry: the brow art is centred on the
+    // anchor (value 170 spans y[-8.3,7.3], placement ty=0) and the eye spans y[-13.6,12.4], so
+    // at a shared anchor the brow lands INSIDE the eye instead of above it. The art gives no
+    // offset — head 0, the only frame with a second placeholder pair, places both at an
+    // IDENTICAL matrix — so the game applies this in code and we must too.
+    const BROW_LIFT = -16;
+    const browGroup = (so, b) => {
+      const mir = (so.sx != null && so.sx < 0) ? -1 : 1;
+      return `<g transform="matrix(${mir} 0 0 1 ${so.tx||0} ${(so.ty||0) + BROW_LIFT})">${b}</g>`;
+    };
+    push(sock.browL, 'Brow_L', 'CatEyebrow', browGroup);
+    push(sock.browR, 'Brow_R', 'CatEyebrow', browGroup);
+    // Worn items on top of the face: neck (lowest), then face, then head-front (hat/crown).
+    h += itemAtSocket('neck', 'NeckItemF', sock.neckItem);
+    h += itemAtSocket('face', 'FaceItemF', sock.faceItem);
+    h += itemAtSocket('head', 'HeadItemF', sock.headItem);
+    slotContent.Head = h;
+    out += `<g transform="${matStr(m)}">${h}</g>`;
+  }
+  // Draw the rig layers back-to-front; the Head layer renders its socket group.
+  for (const L of CAT_RIG_FRONT.layers){
+    if (L.slot === 'Head') headGroup(L.matrix);
+    else { const f = fr(L.slot); if (f !== null) place(L.slot, L.sprite, f, L.matrix); }
+  }
+  let inner = `<g transform="${matStr(CAT_RIG_FRONT.groupOffset)}">${out}</g>`;
+  // Primordial Dwarf / Dwarfism cats are physically TINY in-game (the size trait that
+  // also drives the "Lil'/Tiny" name prefix). Scale the whole puppet down about its
+  // centre so a dwarf kitten reads small instead of full-size.
+  if (cat && cat.sizeTrait && cat.sizeTrait.kind === 'small') {
+    const k = 0.62, px = 5, py = -25;      // pivot near the cat's body centre
+    inner = `<g transform="translate(${px} ${py}) scale(${k}) translate(${-px} ${-py})">${inner}</g>`;
+  }
+  // `.kanim` wraps the posed puppet so the idle animator can swap the whole layer stack per frame
+  // (it must re-emit, not re-transform — layer order/count vary). Inert when nothing animates.
+  const svg = `<svg viewBox="${CAT_RIG_FRONT.viewBox}" style="--cat-texture:${tone[1]}">`+
+    `<defs>${defs}</defs><g class="kanim">${inner}</g></svg>`;
+  // Hand the ingredients to the idle animator (see animatePortrait). Tint each slot's content
+  // ONCE here rather than re-tinting a whole SVG every frame: tintGrays is several regex passes
+  // over ~50KB, which at 30fps would be the entire frame budget. Per frame the animator then only
+  // concatenates already-tinted strings.
+  renderPortrait.last = {
+    defs: tintGrays(defs, lut, tone),
+    slots: Object.fromEntries(Object.entries(slotContent).map(([k, v]) => [k, tintGrays(v, lut, tone)])),
+    groupOffset: matStr(CAT_RIG_FRONT.groupOffset),
+    tone, small: !!(cat && cat.sizeTrait && cat.sizeTrait.kind === 'small'),
+  };
+  return tintGrays(svg, lut, tone);
+}
+
+// ---- IDLE ANIMATION (big/single card only) ------------------------------------------------
+// A cat idles like its real CLASS: catanis.swf's CatTest is an animation menu (776 FrameLabels)
+// whose 65 idles include exactly one per class, and our 14 decoded classes map 1:1 onto them
+// (Medic -> HealerIdleF; Colorless has no class idle and gets the base `idleF`, which is why a
+// Colorless cat barely moves — that IS the game's classless idle, not a bug). Nothing invented.
+//
+// Grid cards stay STATIC on purpose: 120 masked-vector puppets animating at 30fps is a paint
+// storm, and the browse grid already has an unexplained culling artifact. One big card is cheap.
+const ANIM_DIR = 'kittenshare/anims';
+let ANIM_MANIFEST = null;
+const ANIM_CACHE = {};
+async function loadAnim(cls){
+  if (ANIM_CACHE[cls] !== undefined) return ANIM_CACHE[cls];
+  try {
+    if (!ANIM_MANIFEST) ANIM_MANIFEST = await fetch(`${ANIM_DIR}/manifest.json`).then(r => r.json());
+    const e = ANIM_MANIFEST[cls];
+    if (!e) return (ANIM_CACHE[cls] = null);
+    ANIM_CACHE[cls] = await fetch(`${ANIM_DIR}/${e.file}`).then(r => r.json());
+  } catch (_) { ANIM_CACHE[cls] = null; }   // no animation is fine — the static pose stands
+  return ANIM_CACHE[cls];
+}
+// Occasional behaviours (look around / scratch an ear / wag tail) mixed into the idle loop.
+// A behaviour asserts NOTHING about the cat — that's what separates it from the grey hair we
+// stripped, which claimed the cat was old. The game does this itself: `toidleF` (a transition
+// back INTO idle) only exists because it interjects animations and returns. State idles
+// (zombie/werecat/girly/…) and combat moves are deliberately NOT here — see export-cat-anims.js.
+let BEHAVIOURS = undefined;
+async function loadBehaviours(){
+  if (BEHAVIOURS !== undefined) return BEHAVIOURS;
+  try {
+    if (!ANIM_MANIFEST) ANIM_MANIFEST = await fetch(`${ANIM_DIR}/manifest.json`).then(r => r.json());
+    const e = ANIM_MANIFEST._behaviours;
+    BEHAVIOURS = e ? Object.values(await fetch(`${ANIM_DIR}/${e.file}`).then(r => r.json())) : null;
+  } catch (_) { BEHAVIOURS = null; }        // idle-only is a fine degradation
+  return BEHAVIOURS;
+}
+// Drive `svgEl` from a rig. Layer ORDER and COUNT change between frames (a tumbling Jester's legs
+// swap in front of its body; 64 of its 426 frames draw a leg TWICE), so we re-emit the frame's own
+// layer list every tick. Indexing frame N's matrices into a fixed layer list silently scrambles
+// the puppet — parts wear each other's transforms.
+// `gate`, when supplied, is checked each tick: while it returns false the loop FREEZES — no
+// paint, no frame advance — but keeps its rAF alive so it resumes instantly. The grid spike uses
+// it to pause every visible cat mid-scroll (killing the 120-puppet paint storm) without tearing
+// down and rebuilding loops on every scroll tick.
+function driveIdle(svgEl, rig, parts, behaviours, gate){
+  if (!svgEl || !rig || !parts) return () => {};
+  const wrap = svgEl.querySelector('.kanim');
+  if (!wrap) return () => {};
+  // One viewBox for the whole cat: the idle and every behaviour must share it, or the cat would
+  // visibly resize the moment it scratches an ear. Take the roomiest top across all of them.
+  const boxOf = r => (r.viewBox || '').split(/\s+/).map(Number);
+  const all = [rig].concat(behaviours || []);
+  const top = Math.min(...all.map(r => boxOf(r)[1]).filter(n => !isNaN(n)));
+  svgEl.setAttribute('viewBox', `-80 ${top} 170 ${(35 - top).toFixed(1)}`);
+  const paint = fr => {
+    const body = fr.map(l => `<g transform="matrix(${l.m.join(' ')})">${parts.slots[l.s] || ''}</g>`).join('');
+    wrap.innerHTML = parts.small
+      ? `<g transform="translate(5 -25) scale(0.62) translate(-5 25)"><g transform="${parts.groupOffset}">${body}</g></g>`
+      : `<g transform="${parts.groupOffset}">${body}</g>`;
+  };
+  // Loop the class idle; every so often play ONE behaviour through, then fall back to idle.
+  // Colorless is 53% of a typical corpus and its idle is the game's near-motionless classless
+  // one, so without this the majority of shared cats sit frozen.
+  let cur = rig, i = 0, stop = false, last = 0;
+  let nextBreak = 4000 + Math.random() * 6000;   // 4-10s of idle before the first interjection
+  let elapsed = 0;
+  const step = now => {
+    if (stop) return;
+    if (gate && !gate()) { last = now; requestAnimationFrame(step); return; }  // frozen: no jump on resume
+    const dt = last ? now - last : 0;
+    if (now - last >= 1000 / (cur.fps || 30)) {
+      paint(cur.frames[i++]);
+      last = now; elapsed += dt;
+      if (i >= cur.frames.length) {                 // clip finished
+        i = 0;
+        if (cur !== rig) { cur = rig; elapsed = 0; nextBreak = 4000 + Math.random() * 6000; }
+        else if (behaviours && behaviours.length && elapsed >= nextBreak) {
+          cur = behaviours[(Math.random() * behaviours.length) | 0];   // interject, play once
+        }
+      }
+    }
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+  return () => { stop = true; };
+}
+
+// ---- SPIKE: animate ONLY the cats currently on screen; freeze everything while scrolling ------
+// The browse grid is 120 masked-vector puppets — animating them all at 30fps is a paint storm,
+// and the grid has an unexplained culling artifact. This scopes the cost two ways: an
+// IntersectionObserver runs a card's loop ONLY while it is in the viewport, and a scroll flag
+// freezes every running loop mid-scroll (the gate above), so paint happens only when the grid is
+// still. Toggle GRID_ANIM_SPIKE to compare against the shipped static grid.
+const GRID_ANIM_SPIKE = true;
+let __gridCats = [];                 // filtered cats, DOM order — set by renderCards
+let __scrolling = false, __scrollTimer = 0;
+let __gridObserver = null;
+const __gridStop = new Map();        // card element -> stop fn (running loops)
+const __gridParts = new Map();       // card element -> captured parts (rendered once, reused)
+function setupGridAnim(){
+  if (!GRID_ANIM_SPIKE) return;
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  // scroll flag: gate freezes paint while true; clears ~150 ms after scrolling settles
+  if (!setupGridAnim._scrollBound){
+    setupGridAnim._scrollBound = true;
+    addEventListener('scroll', () => {
+      __scrolling = true;
+      clearTimeout(__scrollTimer);
+      __scrollTimer = setTimeout(() => { __scrolling = false; }, 150);
+    }, { passive: true });
+  }
+  const gate = () => !__scrolling;
+  async function startCard(card, cat){
+    if (!cat || __gridStop.has(card)) return;
+    const [rig, behaviours] = await Promise.all([loadAnim(cat.cls), loadBehaviours()]);
+    if (!rig || !card.isConnected) return;
+    const portrait = card.querySelector('.portrait');
+    if (!portrait) return;
+    // renderPortrait namespaces mask ids with a global counter, so a fresh render's slot content
+    // references NEW ids — the card's original <svg> defs have the OLD ones, and reusing it leaves
+    // the fur mask dangling (body renders as an unmasked box). So REPLACE the card's svg with this
+    // self-consistent fresh render, then animate that: defs + slot ids match. Cached per card.
+    let cached = __gridParts.get(card);
+    if (!cached){
+      const svgStr = renderPortrait(cat);           // fresh svg + matching parts in one render
+      cached = { svgStr, parts: renderPortrait.last };
+      __gridParts.set(card, cached);
+    }
+    portrait.innerHTML = cached.svgStr;
+    __gridStop.set(card, driveIdle(portrait.querySelector('svg'), rig, cached.parts, behaviours, gate));
+  }
+  function stopCard(card){
+    const stop = __gridStop.get(card);
+    if (stop){ stop(); __gridStop.delete(card); }
+  }
+  if (__gridObserver) __gridObserver.disconnect();
+  __gridObserver = new IntersectionObserver((entries) => {
+    for (const e of entries){
+      const card = e.target;
+      const cat = __gridCats[+card.dataset.gidx];
+      if (e.isIntersecting) startCard(card, cat); else stopCard(card);
+    }
+  }, { rootMargin: '100px' });   // prefetch a little above/below the fold
+  __gridStop.forEach((_, card) => stopCard(card));
+  __gridParts.clear();
+  document.querySelectorAll('#cards .kcard').forEach((card, i) => {
+    card.dataset.gidx = i;
+    __gridObserver.observe(card);
+  });
+}
+// Attach the idle to a just-rendered big card. `parts` MUST be captured right after that card's
+// renderPortrait call, before another render overwrites renderPortrait.last.
+async function attachIdle(root, cat, parts){
+  if (!root || !cat || !parts) return;
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const [rig, behaviours] = await Promise.all([
+    loadAnim(cat.cls),                   // decodeCat's class field; manifest is keyed by it
+    loadBehaviours(),
+  ]);
+  if (!rig) return;
+  const svgEl = root.querySelector('svg');
+  if (svgEl) driveIdle(svgEl, rig, parts, behaviours);
+}
+
+// The game's part art is grayscale, recolored by a paletted shader
+// (paletted_full.shader): a pixel's luminance picks a COLUMN of the cat's palette
+// row (col = round(r*15)); only gray pixels are remapped (col 0 stays #000000, so
+// black outlines survive; painted-color pixels pass through). Emulate exactly with
+// the 16-col LUT for the cat's coatPalette row. Falls back to a 3-tone ramp only if
+// the LUT asset is unavailable.
+function tintGrays(svg, lut, tone){
+  // Map a gray value 0..255 to the coat shade hex (LUT column, or 3-tone fallback).
+  const shade = v => {
+    if (lut) return lut[Math.max(0, Math.min(15, Math.round(v/255*15)))];
+    const t = v/255; return t<0.34?tone[2]:(t<0.67?tone[1]:tone[0]);
+  };
+  const hex6 = h => h.length===4 ? '#'+h[1]+h[1]+h[2]+h[2]+h[3]+h[3] : h;
+  svg = svg.replace(/(fill|stroke)="rgb\((\d+),(\d+),(\d+)\)"/g, (m, attr, r, g, b) => {
+    r=+r; g=+g; b=+b;
+    const spread = Math.max(r,g,b) - Math.min(r,g,b);
+    if (spread > 24) return m;               // colored (painted eyes etc.) — shader keeps as-is
+    return `${attr}="${shade((r+g+b)/3)}"`;
+  });
+  // Soft-spot pattern frames encode their markings as radial-gradient stops, which the
+  // fill/stroke pass above never touches — remap stop-color the same way so they tint to
+  // the coat instead of rendering raw gray. Preserve the alpha on rgba stops (spots fade
+  // to transparent between markings, revealing the base fur shade). fill/stroke behavior
+  // is unchanged — this is an additive pass over a distinct attribute.
+  svg = svg.replace(/stop-color="rgba?\((\d+),(\d+),(\d+)(?:,([\d.]+))?\)"/g, (m, r, g, b, a) => {
+    r=+r; g=+g; b=+b;
+    const spread = Math.max(r,g,b) - Math.min(r,g,b);
+    if (spread > 24) return m;               // colored stop — leave as-is
+    const hex = hex6(shade((r+g+b)/3));
+    if (a === undefined) return `stop-color="${hex}"`;
+    const rr=parseInt(hex.slice(1,3),16), gg=parseInt(hex.slice(3,5),16), bb=parseInt(hex.slice(5,7),16);
+    return `stop-color="rgba(${rr},${gg},${bb},${a})"`;
+  });
+  return svg;
+}
+
+// ---------- save parsing ----------
+// All cat-blob decoding now lives in the single shared module
+// kittenshare/save-decode.js (loaded above), used by BOTH this page and the Node
+// tools/harness so the two can never drift. decodeCat(data) returns
+// name/cls/gender/abilities/stats/genes plus the build- and genes-gate flags
+// (buildOk, genesResolved, appearanceVerified). For a recognized build-5090 save
+// the genes decode (01-05 LZ4 gap closure), so appearanceVerified is true and the
+// card renders the cat's real per-slot portrait + decoded stats; only an
+// unrecognized build or a failed range/symmetry check keeps it "unverified".
+let allCats = [];
+let SQL = null;
+// The loaded save's in-game day. Age = current_day - cat.birthDay (floored at 1), so it is
+// only knowable with a save open — a shared card has no day and shows no age (the v1 payload
+// is frozen; carrying age would need a schema bump).
+let CURRENT_DAY = null;
+// key -> room name for every cat currently IN THE HOUSE (from files.house_state). Empty when
+// the save has no roster, which is what hides the filter rather than showing an empty list.
+let HOUSE_ROOM = {};
+
+async function openSave(buf){
+  document.getElementById('status').textContent = '⏳ Opening save…';
+  // Local browse view keeps the EAGER corpus-union monolith (D3): load it once here so
+  // every card renders from parts.js/patterns.js, never from lazy chunks.
+  try { await loadMonolith(); }
+  catch(e){ document.getElementById('status').textContent = '❌ Failed to load the puppet assets (kittenshare/parts.js)'; return; }
+  // Init sql.js. The wasm fetch/compile can fail transiently (network blip, or a stale
+  // cached partial) — retry once with a fresh fetch before giving up, and give an
+  // actionable message (a hard refresh clears a bad cache).
+  if (!SQL) {
+    for (let attempt = 1; attempt <= 2 && !SQL; attempt++) {
+      try { SQL = await initSqlJs({ locateFile: f => 'vendor/' + f + (attempt > 1 ? '?r=' + Date.now() : '') }); }
+      catch(e){ if (attempt === 1) { await new Promise(r => setTimeout(r, 250)); continue; }
+        document.getElementById('status').textContent = '❌ Could not load the SQLite engine — try a hard refresh (Ctrl+Shift+R). ' + (e && e.message ? '(' + e.message + ')' : '');
+        return; }
+    }
+  }
+  let db;
+  try { db = new SQL.Database(new Uint8Array(buf)); }
+  catch(e){ document.getElementById('status').textContent = '❌ Not a valid Mewgenics save (SQLite open failed)'; return; }
+  // `current_day` is the save-wide day counter and the OTHER half of a cat's age (the blob
+  // stores only a birth day). It lives in `properties`, so read it once here. Optional: an
+  // absent/odd value simply means no card shows an age — never a guessed one.
+  CURRENT_DAY = null;
+  try {
+    const dayRes = db.exec("SELECT data FROM properties WHERE key='current_day'");
+    const raw = dayRes && dayRes[0] && dayRes[0].values[0] && dayRes[0].values[0][0];
+    const d = Number(raw);
+    if (Number.isInteger(d) && d >= 0 && d < 100000) CURRENT_DAY = d;
+  } catch(e){ /* older/foreign saves may lack properties — age just won't render */ }
+  // The house roster lives in files.house_state (it places each resident in a room). The cats
+  // table is every cat that EVER existed, so this is the only way to know who is actually in
+  // the house — "not dead" is not a proxy (hundreds of not-dead cats are ancient archive
+  // entries). Optional: without it the in-house filter simply stays unavailable.
+  HOUSE_ROOM = {};
+  try {
+    const hs = db.exec("SELECT data FROM files WHERE key='house_state'");
+    const blob = hs && hs[0] && hs[0].values[0] && hs[0].values[0][0];
+    if (blob) for (const r of SaveDecode.parseHouseRoster(new Uint8Array(blob))) HOUSE_ROOM[r.key] = r.room;
+  } catch(e){ /* foreign/older save — no roster, filter hides itself */ }
+  let rows;
+  try { rows = db.exec('SELECT key, data FROM cats')[0]; }
+  catch(e){ document.getElementById('status').textContent = '❌ No cats table in this file'; return; }
+  if (!rows) { document.getElementById('status').textContent = 'No cats found in this save.'; return; }
+  allCats = rows.values.map(([key, data]) => {
+    const cat = decodeCat(data);   // shared decoder → real genes only when appearanceVerified
+    // cats.key is UNTRUSTED: SQLite columns are dynamically typed, so a hostile
+    // save can store arbitrary TEXT in the key column. Coerce to a safe integer
+    // and reject anything else — a cat without a valid key simply gets no share
+    // button. Never let the raw value near the DOM.
+    const k = Number(key);
+    cat.key = Number.isSafeInteger(k) ? k : null;
+    // Which room the cat is in, or null if it isn't in the house at all.
+    cat.room = (cat.key != null && HOUSE_ROOM[cat.key]) || null;
+    return cat;
+  });
+  document.getElementById('status').textContent = `✅ ${allCats.length} kittens loaded (parsed locally)`;
+  document.getElementById('controls').style.display = 'flex';
+  // Only offer the filter when the save actually yielded a roster — an always-on checkbox
+  // that silently matches nothing would be worse than no checkbox.
+  const nHouse = Object.keys(HOUSE_ROOM).length;
+  const ht = document.getElementById('houseTgl');
+  if (ht) ht.style.display = nHouse ? 'flex' : 'none';
+  // Collapse the large drop-zone box + WIP banner once a save is loaded so the card grid
+  // sits near the top (they leave ~400px of dead space above the cards otherwise).
+  const dz = document.getElementById('drop'); if (dz) dz.style.display = 'none';
+  const wip = document.querySelector('.wip'); if (wip) wip.style.display = 'none';
+  renderCards();
+}
+
+function renderCards(){
+  const q = (document.getElementById('srch').value||'').toLowerCase();
+  const hb = document.getElementById('houseOnly');
+  const houseOnly = !!(hb && hb.checked);
+  const cats = allCats.filter(c =>
+    (!houseOnly || !!c.room) &&
+    (!q || c.name.toLowerCase().includes(q) || (c.cls||'').toLowerCase().includes(q)));
+  document.getElementById('cnt').textContent = `Showing ${cats.length} of ${allCats.length}`;
+  const el = document.getElementById('cards');
+  const LIMIT = 120;
+  const shown = cats.slice(0, LIMIT);
+  el.innerHTML = shown.map(c => kittenCard(c, false)).join('') +
+    (cats.length > LIMIT ? `<div class="no-results">…and ${cats.length - LIMIT} more (use search)</div>` : '');
+  // SPIKE: animate on-screen cards only. __gridCats is DOM-order (matches the cards just written).
+  __gridCats = shown;
+  if (typeof setupGridAnim === 'function') setupGridAnim();
+}
+
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// " · Age 15" when we can compute it honestly, else ''. Needs BOTH the cat's decoded birth
+// day and the save's current_day, so a shared card (no save, no day) simply omits it rather
+// than showing a stale or invented number. A DEAD cat's age is frozen at its death day, so it
+// reads as the age it died at rather than ticking on with the calendar.
+function ageText(c){
+  if (typeof catAge !== 'function' || !c) return '';
+  const age = catAge(c.birthDay, CURRENT_DAY, c.deathDay);
+  if (age == null) return '';
+  const died = Number.isInteger(c.deathDay) && c.deathDay >= 0;
+  const why = died
+    ? `age at death = death day (${esc(String(c.deathDay))}) − birth day (${esc(String(c.birthDay))})`
+    : `age = current_day (${esc(String(CURRENT_DAY))}) − birth day (${esc(String(c.birthDay))}), floored at 1`;
+  return ` · <span class="kage" title="${why} — the save stores day stamps, not an age">Age ${esc(String(age))}</span>`;
+}
+
+// The cat's life status. Only 'dead' is actually decodable today: the record's tail carries a
+// death-day stamp (-1 = hasn't happened), and a real stamp yields a plausible age at death.
+// 'alive' is deliberately NOT badged — it is the default and, crucially, it does NOT mean
+// "in the house" (plenty of not-dead cats are ancient archive/pedigree entries). Other
+// statuses the game shows (donated, retired…) are not located yet, so they are never guessed.
+// Where the cat lives, when it's in the house. Doubles as the visible evidence behind the
+// in-house filter — the room name comes straight from house_state.
+function roomBadge(c){
+  if (!c || !c.room) return '';
+  return `<div class="kroom" title="in the house — house_state places this cat in ${esc(c.room)}">🏠 ${esc(String(c.room).replace(/_/g,' '))}</div>`;
+}
+
+function statusBadge(c){
+  if (!c || c.status !== 'dead') return '';
+  const d = Number.isInteger(c.deathDay) && c.deathDay >= 0 ? ` on day ${esc(String(c.deathDay))}` : '';
+  return `<div class="kdead" title="this cat has a death-day stamp in the save${d}">💀 dead${d}</div>`;
+}
+
+// Stats block from cat.stats (may be null, or have null sub-fields). Every value
+// is coerced through esc(String(v)) so nothing decoded reaches the DOM unescaped.
+// The in-game cat sheet lays the 7 core stats out in two columns with the game's own
+// glyphs: STR/DEX/CON on the left, INT/SPD/CHA/LCK on the right. We mirror that layout
+// and use the real FontIcon_* art (ui-icons.js, extracted from ui.swf).
+//
+// The game shows each stat as [effective (green)] [base (box)] [modifier]. We render the
+// BASE value ONLY: effective = base + level bonuses + equipment, and we decode none of
+// those, so a green "effective" number or a "+0" modifier column would be invented. The
+// decoded value IS the base, so it gets the game's base-box styling and nothing more.
+const STAT_COLS = [['str','dex','con'], ['int','spd','cha','lck']];
+const STAT_LABEL = { str:'STR', dex:'DEX', con:'CON', int:'INT', spd:'SPD', cha:'CHA', lck:'LCK' };
+
+// Real glyph when ui-icons.js loaded, else the stat's letters — a value must never
+// render unlabelled just because an asset is missing.
+function statIcon(k){
+  const ic = (typeof STAT_ICONS !== 'undefined') && STAT_ICONS[k];
+  if (!ic) return `<span class="kfb">${esc(STAT_LABEL[k] || k.toUpperCase())}</span>`;
+  return `<svg viewBox="${esc(ic.viewBox)}" aria-hidden="true">${ic.defs}${ic.body}</svg>`;
+}
+
+// The class emblem the game stamps top-left of the sheet (paw = Fighter, Ø = Colorless …).
+// CLASS_ICONS is keyed by the decoder's class name, so cat.cls indexes it directly.
+// Returns '' for an unknown/absent class — the text label still carries the name.
+function classIcon(cls){
+  const ic = (typeof CLASS_ICONS !== 'undefined') && cls && CLASS_ICONS[cls];
+  if (!ic) return '';
+  return `<svg class="kemblem" viewBox="${esc(ic.viewBox)}" role="img" aria-label="${esc(cls)}"><title>${esc(cls)}</title>${ic.defs}${ic.body}</svg>`;
+}
+
+// The ♂/♀/? glyph the game prints right after the name.
+function genderIcon(g){
+  const ic = (typeof GENDER_ICONS !== 'undefined') && g && GENDER_ICONS[g];
+  if (!ic) return '';
+  return `<svg class="ksex" viewBox="${esc(ic.viewBox)}" role="img" aria-label="${esc(g)}"><title>${esc(g)}</title>${ic.defs}${ic.body}</svg>`;
+}
+
+// Ability descriptions carry the game's own [img:token] markup ("Gain +2 [img:shield]."). Every
+// token that actually occurs is now covered by real art: the 7 stats live in STAT_ICONS and
+// shield/divineshield/champion/elite in TOKEN_ICONS. The text badge remains only as a guard for
+// a token we have not seen — a description must never lose meaning to a missing glyph.
+// Everything outside a token is escaped, never injected.
+function renderAbilityDesc(raw){
+  return String(raw).split(/(\[img:[a-z_]+\]|\[[a-z_]+\])/i).map(part => {
+    const m = part.match(/^\[(?:img:)?([a-z_]+)\]$/i);
+    if (!m) return esc(part);
+    const tok = m[1].toLowerCase();
+    const ic = ((typeof STAT_ICONS !== 'undefined') && STAT_ICONS[tok]) ||
+               ((typeof TOKEN_ICONS !== 'undefined') && TOKEN_ICONS[tok]);
+    if (ic) return `<svg class="ktok" viewBox="${esc(ic.viewBox)}" role="img" aria-label="${esc(tok)}"><title>${esc(tok)}</title>${ic.defs}${ic.body}</svg>`;
+    return `<b class="ktokb">${esc(tok.toUpperCase())}</b>`;
+  }).join('');
+}
+
+// One ability, as the game shows it: real icon + display name + what it actually does.
+// Abilities decode as internal ids (BasicRanged_Hunter) which mean nothing to a player —
+// ABILITY_INFO maps them to the game's own name ("Lobbed Shot"), icon frame, and description.
+//
+// Degrades in steps, because ability-icons.js is LAZY: no art -> name only; no description ->
+// name only; no vocab at all -> the raw id. A cat's ability list is never dropped just
+// because an asset is missing. The art is multi-colour game icons, so it is NOT tinted
+// (unlike the mono ui-icons glyphs).
+// The game's four spellbook category symbols (sword/shield/arrow/star), shared with the wiki
+// page's abilities view so a shared card reads the same. Multi-colour, drawn as-is.
+const CATEGORY_SVG = {
+  Offense:'<svg viewBox="0 0 24 24"><path fill="#dc2626" d="M12 2 14.4 6.5 13.8 14 10.2 14 9.6 6.5z"/><rect x="6.5" y="13.6" width="11" height="2.2" rx="1.1" fill="#6b7280"/><rect x="11" y="15.8" width="2" height="5.2" rx="1" fill="#7c3a1d"/></svg>',
+  Defense:'<svg viewBox="0 0 24 24"><path fill="#2563eb" d="M12 2 20 5v6c0 5-3.6 9-8 11-4.4-2-8-6-8-11V5z"/></svg>',
+  Other:'<svg viewBox="0 0 24 24"><path fill="#16a34a" d="M4 9.5h9V5l7 7-7 7v-4.5H4z"/></svg>',
+  Special:'<svg viewBox="0 0 24 24"><path fill="#f59e0b" d="M12 2l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4 5.9 20.5l1.2-6.5L2.3 8.9 8.9 8z"/></svg>'
+};
+function abilityChip(id){
+  const info = (typeof ABILITY_INFO !== 'undefined') && ABILITY_INFO[id];
+  const label = (info && info.n) || id;
+  const art = info && info.f !== undefined && (typeof ABILITY_ART !== 'undefined') && ABILITY_ART[info.k + info.f];
+  const icon = art
+    ? `<svg class="kabicon" viewBox="${esc(ABILITY_VIEWBOX)}" aria-hidden="true">${art.defs}${art.body}</svg>`
+    : '<span class="kabicon"></span>';
+  const desc = (info && info.d) ? `<span class="kabil-d">${renderAbilityDesc(info.d)}</span>` : '';
+  // Mana cost, as the game prints on each card. 0 is a REAL value (a free ability) so it is
+  // shown; only an ability with no cost block at all (basic attacks) omits the badge.
+  const mana = (info && info.m !== undefined)
+    ? `<span class="kabil-mp" title="${esc(String(info.m))} mana">${esc(String(info.m))}</span>` : '';
+  // Spellbook CATEGORY (keyed by the ability id we already have): colours the row's left edge
+  // and adds the game's category symbol, exactly like the wiki cards. Best-guess from game
+  // files — hence the tooltip. Absent -> no edge tint, no symbol.
+  const cat = (typeof ABILITY_CATEGORY !== 'undefined') && ABILITY_CATEGORY[id];
+  const catSym = (cat && CATEGORY_SVG[cat])
+    ? `<span class="kabil-cat" role="img" aria-label="${esc(cat)}" title="${esc(cat)} — best-guess from game files">${CATEGORY_SVG[cat]}</span>` : '';
+  const catClass = cat ? ' cat-' + cat : '';
+  const title = label === id ? label : label + ' (' + id + ')';
+  // Link the name to the wiki's per-ability page. It keys those by DISPLAY name under the
+  // MediaWiki convention — spaces become underscores (/wiki/Lobbed_Shot, /wiki/Blizzard) —
+  // so build the title that way rather than percent-encoding the space. Only link when we
+  // resolved a real name; linking a raw internal id would just 404.
+  // rel=noopener/noreferrer because this opens a third-party tab.
+  const name = (info && info.n && label !== id)
+    ? `<a class="kabil-n" href="https://mewgenics.wiki.gg/wiki/${esc(encodeURIComponent(label.replace(/ /g, '_')))}" target="_blank" rel="noopener noreferrer" title="open ${esc(label)} on the Mewgenics wiki">${esc(label)}</a>`
+    : `<b>${esc(label)}</b>`;
+  return `<div class="kabil-i${catClass}" title="${esc(title)}">${icon}<span class="kabil-t">${name}${desc}</span>${mana}${catSym}</div>`;
+}
+
+// ---- internal values: reconstructing the stat MODIFIER (partial by construction) ----
+// The save stores ONLY base stats — verified by scanning every byte offset of the
+// decompressed record: each cat has exactly one run of 7 small ints, and it equals the
+// decoded base (true even for cats with equipment). The game computes effective at runtime
+// and never persists it, so a modifier can only be REBUILT from its sources.
+//
+// We can see two of those sources: mutation stat effects and equipped-item bonuses. We
+// CANNOT see level bonuses (level is still unlocated → null) or trait/status effects. So
+// this total is a floor, not the truth, and every card that shows it is labelled partial.
+// That is the whole reason it lives behind an opt-in toggle instead of the default view.
+const MOD_RE = /([+-]\s*\d+)\s*(STR|DEX|CON|INT|SPD|CHA|LCK)\b/gi;
+
+// Sum a mutation's effect text ("+1 SPD, +1 INT") into per-stat deltas. SHIELD/HP and other
+// non-core tokens are ignored — they aren't in the 7-stat grid.
+function modsFromMutations(cat){
+  const out = {};
+  const ms = (cat && cat.genes && Array.isArray(cat.genes.mutations)) ? cat.genes.mutations : [];
+  for (const m of ms) {
+    if (!m || !m.effect) continue;
+    let hit; MOD_RE.lastIndex = 0;
+    while ((hit = MOD_RE.exec(m.effect))) {
+      const k = hit[2].toLowerCase(), v = parseInt(hit[1].replace(/\s+/g, ''), 10);
+      if (!isNaN(v)) out[k] = (out[k] || 0) + v;
+    }
+  }
+  return out;
+}
+
+// Sum the flat stat bonuses of every equipped item (item-ids.js `stats`, from the gons).
+function modsFromItems(cat){
+  const out = {};
+  const its = (cat && Array.isArray(cat.items)) ? cat.items : [];
+  for (const it of its) {
+    if (!it || !it.stats) continue;
+    for (const k in it.stats) out[k] = (out[k] || 0) + it.stats[k];
+  }
+  return out;
+}
+
+function knownMods(cat){
+  const a = modsFromMutations(cat), b = modsFromItems(cat), out = {};
+  for (const k of ['str','dex','con','int','spd','cha','lck']) {
+    const v = (a[k] || 0) + (b[k] || 0);
+    if (v) out[k] = v;
+  }
+  return out;
+}
+
+// HP is MAX health and the game computes it as `effective CON x 4`
+// (mewgenics.wiki.gg/wiki/Stats). Verified on this corpus: 99.1% of decoded hp values are
+// divisible by 4 and hp/4 - baseCon is always a whole number. So when hp decodes we can
+// INVERT the formula for the cat's EXACT effective CON — including the level-up and injury
+// bonuses that knownMods() can't see. That makes CON the one row that is measured, not
+// estimated. Returns null when hp is absent or fails the divisibility check.
+function exactEffectiveCon(s){
+  if (!s || !Number.isInteger(s.hp) || !Number.isInteger(s.con)) return null;
+  if (s.hp <= 0 || s.hp % 4 !== 0) return null;
+  return s.hp / 4;
+}
+
+// MP is MAX mana = `CHA x 3` — also DERIVED, never stored. That is precisely why the
+// record-scan for an MP field kept coming up empty: there is no field to find. Computed
+// from the same CHA basis the current view shows, and always labelled derived so it is
+// never mistaken for a decoded value.
+function derivedMp(cha){ return Number.isInteger(cha) ? cha * 3 : null; }
+
+function statsBlock(s, cat, internals){
+  if (!s) return '';
+  const mods = internals ? knownMods(cat) : null;
+  const effCon = internals ? exactEffectiveCon(s) : null;
+  let usedExactCon = false;
+  const grid = STAT_COLS.map(col => {
+    const rows = col.filter(k => s[k] != null).map(k => {
+      const label = STAT_LABEL[k] || k.toUpperCase();
+      const base = s[k];
+      if (!internals) {
+        return `<div class="kstat" title="${esc(label)} ${esc(String(base))} (base)">` +
+          `${statIcon(k)}<span class="kval">${esc(String(base))}</span></div>`;
+      }
+      // CON prefers the HP-derived truth; every other stat is the partial rebuild.
+      const exact = (k === 'con' && effCon != null);
+      if (exact) usedExactCon = true;
+      const eff = exact ? effCon : base + (mods[k] || 0);
+      const d = eff - base;
+      const cls = d > 0 ? 'up' : (d < 0 ? 'down' : 'zero');
+      const sign = d > 0 ? '+' + d : String(d);
+      const why = exact
+        ? `exact — inverted from HP (${esc(String(s.hp))} ÷ 4), so it includes level & injury bonuses`
+        : 'rebuilt from mutations + items only; level & injury bonuses not included';
+      return `<div class="kstat" title="${esc(label)}: effective ${esc(String(eff))} = base ${esc(String(base))} ${d >= 0 ? '+' : '−'} ${Math.abs(d)} — ${why}">` +
+        `${statIcon(k)}<span class="keff${d ? '' : ' zero'}${exact ? ' exact' : ''}">${esc(String(eff))}</span>` +
+        `<span class="kval">${esc(String(base))}</span>` +
+        `<span class="kmod ${cls}">${esc(sign)}</span></div>`;
+    }).join('');
+    return rows ? `<div class="kstatcol">${rows}</div>` : '';
+  }).join('');
+  // HP/MP/level sit outside the game's 7-stat grid. HP is decoded (max = effCON x 4); MP is
+  // DERIVED from CHA; level remains genuinely unlocated and still never renders.
+  const chaBasis = internals && s.cha != null ? s.cha + ((mods.cha) || 0) : s.cha;
+  const mp = derivedMp(chaBasis);
+  const cells = [];
+  if (s.hp != null) cells.push(`<span class="stat" title="max health — the game computes it as effective CON × 4"><b>HP</b> ${esc(String(s.hp))}</span>`);
+  if (mp != null) cells.push(`<span class="stat derived" title="max mana — DERIVED, not stored in the save: the game computes it as CHA × 3 (${esc(String(chaBasis))} × 3)"><b>MP</b> ${esc(String(mp))} <i>≈</i></span>`);
+  if (s.level != null) cells.push(`<span class="stat"><b>LVL</b> ${esc(String(s.level))}</span>`);
+  const extra = cells.join('');
+  const note = internals
+    ? `<div class="kpartial">⚠ modifiers are REBUILT from mutations + items${usedExactCon ? '; CON is exact (inverted from HP)' : ''} — level &amp; injury bonuses aren't decoded, so the other stats can disagree with in-game</div>`
+    : '';
+  return (grid ? `<div class="kstats${internals ? ' wide' : ''}">${grid}</div>` : '') +
+         (extra ? `<div class="kstats-x">${extra}</div>` : '') + note;
+}
+
+// Mutation list from cat.genes.mutations (decoded in save-decode.js — a slot-frame
+// >=300 is a mutation, resolved to a name via mutations-catalog.js, L/R deduped).
+// Renders a compact "🧬 Region: Name · Region: Name" line; only shown for mutated
+// cats. Names are game data but escaped anyway; uncatalogued ids show as Unknown #id.
+function mutBlock(c){
+  const ms = (c.genes && Array.isArray(c.genes.mutations)) ? c.genes.mutations : [];
+  if (!ms.length) return '';
+  const items = ms.map(m => {
+    const cls = m.inCatalog ? '' : ' class="unknownmut"';
+    return `<span class="mreg">${esc(m.region)}:</span> <b${cls}>${esc(m.name)}</b>`;
+  }).join(' · ');
+  return `<div class="kmut">🧬 ${items}</div>`;
+}
+
+// Equipped items (cat.items = [{key,kind,frame,name}] decoded in save-decode.js). Shows a
+// compact list grouped by slot with an emoji per kind. Worn kinds (head/face/neck/weapon)
+// are the ones that also render on the portrait; trinket/modifier are inventory-only.
+const ITEM_KIND_ICON = { head:'👑', face:'😎', neck:'📿', weapon:'⚔️', trinket:'🎒', modifier:'✨' };
+function itemBlock(c){
+  const its = Array.isArray(c.items) ? c.items : [];
+  if (!its.length) return '';
+  const cells = its.map(i => {
+    const icon = ITEM_KIND_ICON[i.kind] || '•';
+    return `<span>${icon} <b>${esc(i.name)}</b> <span class="islot">${esc(i.kind)}</span></span>`;
+  }).join(' · ');
+  return `<div class="kitem">🎒 ${cells}</div>`;
+}
+
+// Size trait badge. The game prefixes tiny cats' display names ("Lil' …" / "Tiny …")
+// but that exact prefix string lives only in compiled game code — not in the save or
+// gpak — so we can't reproduce the precise wording. What we CAN decode is the cause:
+// the PrimordialDwarf / Dwarfism birth-defect disorder. We surface it honestly as a
+// size trait rather than fabricating the game's prefix.
+function sizeBadge(c){
+  const t = c && c.sizeTrait;
+  if (!t || t.kind !== 'small') return '';
+  return `<div class="ksize" title="This cat has the ${esc(t.disorder)} birth defect — in-game its name gets a size prefix like “Lil’” or “Tiny”.">🐁 Tiny · ${esc(t.disorder)}</div>`;
+}
+
+function kittenCard(c, big){
+  const verified = !!c.appearanceVerified;
+  // On the fallback branch (or an unrecognized build) never claim the portrait is
+  // real — show an honest "appearance unverified" label (naming the build when the
+  // save format itself was unrecognized).
+  const unknownBuild = c.buildOk === false && c.build != null;
+  const unverified = verified ? '' :
+    `<div class="unverified">⚠ appearance unverified${unknownBuild ? ' · unrecognized save build ' + esc(String(c.build)) : ''}</div>`;
+  // Pose (catanis.swf idle rig), coat COLOR, and fur PATTERN (CatTexture overlay) are
+  // now all real. The one remaining approximation is that stripes render straight rather
+  // than UV-wrapped to the body contour (SVG can't per-pixel sample the texture).
+  const approx = verified ?
+    `<div class="approx">real pose + coat color + fur pattern · stripes render straight (no UV contour wrap)</div>` : '';
+  const abils = (c.abilities && c.abilities.length)
+    ? `<div class="kabil">${c.abilities.slice(0,8).map(abilityChip).join('')}</div>` : '';
+  // Stats: after the 01-05 LZ4 gap closure the compact cats.data blob decodes the 7
+  // core stats (+HP when plausible) for real cats, so statsBlock renders them. The
+  // "⚠ stats unverified" label appears ONLY when c.stats is genuinely null (e.g. an
+  // unrecognized build or a blob that failed to decompress) — never a fabricated
+  // value, never a silently blank card. MP/level stay null (unlocated) and simply
+  // don't render. Mirrors the appearance-unverified label.
+  // The internals toggle only exists in the local browse view; a shared card always renders
+  // the plain base stats (a share link must not carry a debug view).
+  const cb = document.getElementById('internals');
+  const stats = statsBlock(c.stats, c, !big && !!(cb && cb.checked)) ||
+    `<div class="unverified">⚠ stats unverified</div>`;
+  const portrait = renderPortrait(c);
+  // Capture the puppet's ingredients for the idle animator RIGHT HERE — renderPortrait.last is
+  // overwritten by the next render, and the grid renders 120 cards after this one.
+  if (big) kittenCard.pendingIdle = { cat: c, parts: renderPortrait.last };
+  return `<div class="kcard${big?' single':''}">
+    <div class="portrait">${portrait}</div>
+    ${approx}
+    <div class="kname">${classIcon(c.cls)}<span>${esc(c.name)}</span>${genderIcon(c.gender)}</div>
+    <div class="kmeta">${esc(c.cls||'—')}${c.gender && !genderIcon(c.gender) ? ' · '+esc(c.gender) : ''}${ageText(c)}</div>
+    ${roomBadge(c)}${statusBadge(c)}
+    ${sizeBadge(c)}
+    ${unverified}
+    ${mutBlock(c)}
+    ${itemBlock(c)}
+    ${stats}
+    ${abils}
+    ${(big || c.key == null)?'':`<button class="share-btn" data-key="${esc(String(c.key))}">🔗 Share link</button>`}
+  </div>`;
+}
+
+// ---------- sharing (data in URL fragment) ----------
+// The share payload is the versioned v1 blob defined in docs/kittenshare-share-spec.md
+// and implemented ONCE in kittenshare/save-decode.js (encodeShare/decodeShare). It lives
+// entirely in the URL fragment (#k=), which browsers NEVER transmit to the origin — so
+// the save-derived cat data never leaves the device (SIT-03). Because the full 14-slot
+// appearance is carried, a shared link now renders a VERIFIED real portrait (SHR-03),
+// not the old unverified neutral kitten.
+
+// SHR-05 CTA appended to EVERY shared card (happy path, bad link, unsupported version).
+function shareCTA(){
+  return `<p style="text-align:center;margin-top:12px;font-size:12px"><a href="${location.pathname}">Open your own save →</a></p>`;
+}
+function showShareView(html){
+  document.getElementById('openView').style.display = 'none';
+  const sv = document.getElementById('shareView');
+  sv.style.display = 'block';
+  sv.innerHTML = html + shareCTA();
+  // The card is in the DOM now, so its idle can start. Fire-and-forget: the animation lazy-loads
+  // one class rig and simply never starts if that fetch fails — the static pose is the fallback,
+  // never a broken card.
+  const p = kittenCard.pendingIdle;
+  kittenCard.pendingIdle = null;
+  if (p) attachIdle(sv, p.cat, p.parts);
+}
+// A friendly, honest fallback card (never a crash or a blank page — SHR-04).
+function fallbackCard(title, msg){
+  return `<div class="kcard single" style="text-align:center">
+    <div class="kname">${esc(title)}</div>
+    <div class="kmeta" style="margin-top:8px;line-height:1.5">${esc(msg)}</div>
+  </div>`;
+}
+
+function share(key, btn){
+  const c = allCats.find(x => x.key === key);
+  if (!c) return;
+  // Build the fragment via the shared codec — no btoa, no manual char-swap (the
+  // lz-string blob is already URI-safe). SHR-02 producer guard: a >1900-char URL is
+  // refused rather than copied. In practice real cats land ~200 chars (10x headroom).
+  const blob = SaveDecode.encodeShare(c);
+  const url = location.origin + location.pathname + '#k=' + blob;
+  if (!blob || url.length > 1900){
+    btn.textContent = '⚠ Link too long'; btn.classList.add('copied');
+    setTimeout(()=>{ btn.textContent='🔗 Share link'; btn.classList.remove('copied'); }, 2200);
+    return;
+  }
+  navigator.clipboard.writeText(url).then(()=>{
+    btn.textContent = '✅ Copied!'; btn.classList.add('copied');
+    setTimeout(()=>{ btn.textContent='🔗 Share link'; btn.classList.remove('copied'); }, 1600);
+  }).catch(()=>{
+    // writeText rejects on non-secure origins, unfocused documents, or denied
+    // permission — fall back to showing the URL so the share still works.
+    window.prompt('Copy this share link:', url);
+  });
+}
+async function tryShareView(){
+  // lz-string's compressToEncodedURIComponent emits exactly [A-Za-z0-9+-$] (its
+  // URI-safe alphabet). The class MUST include '+' and '$' or a blob would be
+  // truncated mid-string and fail to decode.
+  const m = location.hash.match(/#k=([A-Za-z0-9+\-$]+)/);
+  if (!m) return false;
+  // decodeShare owns all the untrusted-input hygiene (length cap, decompress/parse in
+  // try/catch, version dispatch). It returns: a real verified cat, a
+  // {__unsupportedVersion} sentinel, or null — and never throws.
+  const cat = SaveDecode.decodeShare(m[1]);
+  if (cat && cat.__unsupportedVersion){
+    // Newer/unknown payload version (SHR / share-spec §8) — graceful, not garbled.
+    showShareView(fallbackCard('Made with a newer version',
+      'This link was made with a newer version of KittenShare. Refresh the page and try again.'));
+    return true;
+  }
+  if (!cat){
+    // Malformed / oversized / undecodable #k= (SHR-04) — a friendly card, never a crash.
+    showShareView(fallbackCard("This share link couldn't be read",
+      'The link looks broken or incomplete. Ask for a fresh link, or open your own save below.'));
+    return true;
+  }
+  // Happy path: decodeShare set appearanceVerified:true. The recipient has NOT loaded the
+  // eager monolith (that is the local view's job), so lazy-load ONLY the ~12 chunks this
+  // cat's slot frames + pattern reference (loadNeededParts), THEN render the real portrait
+  // from the fragment alone — no save file (SHR-03 + AST-01). A chunk-fetch failure degrades
+  // to the friendly fallback card rather than a blank/half-rendered card (SHR-04).
+  try {
+    await loadNeededParts(cat.genes.slots, cat.genes.pattern);
+  } catch(e){
+    showShareView(fallbackCard("Couldn't load this kitten's art",
+      'The shared kitten data is fine, but its puppet assets failed to load. Check your connection and refresh.'));
+    return true;
+  }
+  // Ability names/descriptions/mana (~240 KB) THEN only this cat's ~8 icon frames (~70 KB). Both
+  // non-fatal: a miss degrades to ids / no-icon, never blocks the card. Vocab first — the icon
+  // loader resolves each ability id to its frame via ABILITY_INFO.
+  await loadAbilityInfo();
+  await loadAbilityArt(cat.abilities);
+  showShareView(kittenCard(cat, true));
+  return true;
+}
+
+// ---------- wiring ----------
+// Share buttons are wired via data-key + ONE delegated listener — never an inline
+// onclick with an interpolated value (the untrusted cats.key would be a stored-XSS
+// vector the moment it reached innerHTML). data-key holds a validated safe integer.
+document.getElementById('cards').addEventListener('click', e => {
+  const b = e.target.closest('.share-btn');
+  if (b) share(Number(b.dataset.key), b);
+});
+const drop = document.getElementById('drop'), fileIn = document.getElementById('file');
+drop.onclick = () => fileIn.click();
+// Neither entry point may fire-and-forget: a rejected arrayBuffer()/openSave()
+// used to leave #status stuck on "⏳ Opening save…" with no error shown.
+function openFile(f){
+  f.arrayBuffer().then(openSave).catch(() => {
+    document.getElementById('status').textContent = '❌ Could not read that file';
+  });
+}
+fileIn.onchange = () => { if (fileIn.files[0]) openFile(fileIn.files[0]); };
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('drag'); };
+drop.ondragleave = () => drop.classList.remove('drag');
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove('drag'); const f = e.dataTransfer.files[0]; if (f) openFile(f); };
+// DEV ONLY: a one-click loader for the local __demo.sav, so testing doesn't need the file picker
+// each reload. Gated to localhost/file:// — it never renders on the deployed site, and the save
+// isn't published there regardless.
+(function(){
+  const isDev = ['localhost','127.0.0.1','[::1]',''].includes(location.hostname) || location.protocol === 'file:';
+  const btn = document.getElementById('devLoad');
+  if (!isDev || !btn) return;
+  btn.style.display = 'inline-block';
+  const DEV_LABEL = '🛠 dev: load __demo.sav';
+  btn.onclick = () => {
+    btn.textContent = '🛠 loading…';
+    fetch('__demo.sav').then(r => { if (!r.ok) throw 0; return r.arrayBuffer(); }).then(openSave)
+      .then(() => { btn.textContent = DEV_LABEL; })
+      .catch(() => { btn.textContent = '🛠 __demo.sav not found'; });
+  };
+})();
+window.addEventListener('hashchange', () => location.reload());
+tryShareView();
+</script>
+</body>
+</html>

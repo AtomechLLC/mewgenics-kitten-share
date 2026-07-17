@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mewgenics — Items</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,sans-serif;font-size:14px;color:#222;background:#f7f3ec;padding:1.5rem}
+  h1{font-size:20px;font-weight:600;margin-bottom:4px}
+  .subtitle{font-size:13px;color:#666;margin-bottom:1rem}
+  .subtitle a{color:#2d6a4f}
+  #status{font-size:13px;color:#666;padding:8px 0;min-height:20px}
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+  .controls input{padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;width:240px}
+  .filter-btns{display:flex;gap:5px;flex-wrap:wrap}
+  .filter-btns button{font-size:11px;padding:4px 10px;border-radius:20px;cursor:pointer;border:1px solid #bbb;background:#fff;color:#555;transition:background .15s;white-space:nowrap}
+  .filter-btns button.active{background:#1a1a2e;color:#fff;border-color:#1a1a2e}
+  .row2{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;align-items:center}
+  .rar-btns,.flag-btns{display:flex;gap:5px;flex-wrap:wrap}
+  .rar-btns button,.flag-btns button{font-size:11px;padding:3px 10px;border-radius:20px;cursor:pointer;border:1px solid #bbb;background:#fff;color:#555;white-space:nowrap}
+  .rar-btns button.active{background:#7e3af2;color:#fff;border-color:#7e3af2}
+  .flag-btns button.active{background:#b45309;color:#fff;border-color:#b45309}
+  .view-btns{display:flex;gap:4px}
+  .view-btns button{font-size:11px;padding:4px 10px;border-radius:6px;cursor:pointer;border:1px solid #bbb;background:#fff;color:#555;white-space:nowrap}
+  .view-btns button.active{background:#1a1a2e;color:#fff;border-color:#1a1a2e}
+  .dl-btn{margin-left:auto;padding:6px 14px;background:#2d6a4f;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500}
+  .dl-btn:hover{background:#1b4332}
+  .count{font-size:12px;color:#888;margin-bottom:6px}
+  .tbl-wrap{overflow-x:auto;border:1px solid #ddd;border-radius:8px;background:#fff}
+  .tbl-wrap.as-cards{overflow:visible;border:none;background:transparent;border-radius:0}
+  table{border-collapse:collapse;width:100%;min-width:720px}
+  thead th{background:#1a1a2e;color:#fff;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;padding:9px 12px;text-align:left;white-space:nowrap;position:sticky;top:0;cursor:pointer;user-select:none}
+  thead th:hover{background:#2d2d50}
+  thead th.sort-asc::after{content:" ▲";font-size:10px;opacity:.9}
+  thead th.sort-desc::after{content:" ▼";font-size:10px;opacity:.9}
+  thead th:not(.sort-asc):not(.sort-desc)::after{content:" ⇅";font-size:10px;opacity:.35}
+  td{padding:7px 12px;border-bottom:1px solid #eee;vertical-align:top;line-height:1.45}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:#f9f9f9}
+  .desc{color:#555;font-size:12px;margin-top:2px}
+  .icon-cell{width:40px;text-align:center;padding:4px 6px}
+  .item-icon{width:32px;height:32px;image-rendering:pixelated;border-radius:4px;display:block;margin:0 auto}
+  .item-icon-missing{width:32px;height:32px;display:inline-block;background:#e5e7eb;border-radius:4px}
+  /* slot + rarity badges */
+  .slot-badge{display:inline-block;font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;white-space:nowrap;background:#eef2f7;color:#334155}
+  .rar-badge{display:inline-block;font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;white-space:nowrap}
+  .rar-common{background:#f1f5f9;color:#475569}
+  .rar-uncommon{background:#dcfce7;color:#166534}
+  .rar-rare{background:#dbeafe;color:#1e40af}
+  .rar-very_rare{background:#ede9fe;color:#6d28d9}
+  .rar-quest{background:#fef3c7;color:#92400e}
+  .rar-sidequest{background:#cffafe;color:#155e75}
+  .rar-medium{background:#f1f5f9;color:#475569}
+  .flag{display:inline-block;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:5px;vertical-align:middle}
+  .flag-cursed{background:#fde2e2;color:#9b1c1c}
+  .flag-consumable{background:#e0f2fe;color:#075985}
+  .set-tag{font-size:11px;color:#7c5b2e;background:#f6ede0;padding:1px 7px;border-radius:10px;white-space:nowrap}
+  .stat-chip{display:inline-flex;align-items:center;gap:1px;font-size:12px;font-weight:600;color:#444;margin-right:6px;white-space:nowrap}
+  .stat-chip .stat-name{font-size:11px;color:#555}
+  .status-icon{display:inline-flex;align-items:center;vertical-align:-0.22em;margin:0 1px}
+  .status-icon svg{width:1.15em;height:1.15em}
+  .status-badge{display:inline-block;background:rgba(124,58,237,.12);color:#6d28d9;font-weight:700;font-size:.85em;line-height:1.3;border-radius:4px;padding:0 5px;margin:0 1px;white-space:nowrap}
+  .unknown-token{font-size:10px;background:#f3f4f6;color:#6b7280;border-radius:3px;padding:1px 3px;font-family:monospace}
+  .no-results{text-align:center;color:#999;padding:2rem;font-style:italic}
+  .loader{text-align:center;padding:3rem;color:#888;font-size:15px}
+  .error-box{background:#fee2e2;color:#991b1b;padding:1rem;border-radius:8px;margin:1rem 0}
+  /* card grid */
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px}
+  .it-card{position:relative;display:flex;flex-direction:column;border:1px solid #e5e7eb;border-left:4px solid var(--rar,#cbd5e1);border-radius:8px;background:#fff;padding:6px 9px;min-width:0}
+  .it-card-name{font-weight:600;font-size:13px;text-align:center;margin-bottom:3px;padding:0 22px}
+  .it-card-corner{position:absolute;top:5px;right:7px;font-size:13px}
+  .it-card-row{display:flex;align-items:flex-start;gap:8px}
+  .it-card-icon{flex:none}
+  .it-card-icon .item-icon,.it-card-icon .item-icon-missing{width:34px;height:34px;margin:0}
+  .it-card-body{flex:1;min-width:0}
+  .it-card-desc{font-size:12px;line-height:1.45;color:#555}
+  .it-card-stats{margin-top:3px}
+  .rbd-common{--rar:#cbd5e1}.rbd-uncommon{--rar:#16a34a}.rbd-rare{--rar:#2563eb}
+  .rbd-very_rare{--rar:#7c3aed}.rbd-quest{--rar:#d97706}.rbd-sidequest{--rar:#0891b2}
+  .rbd-medium{--rar:#cbd5e1}.rbd-{--rar:#cbd5e1}
+</style>
+</head>
+<body>
+
+<h1>Mewgenics — Items</h1>
+<p class="subtitle">All items by slot, rarity, and set · Data from <a href="https://mewgenics.wiki/api/v1/items.json" target="_blank">mewgenics.wiki</a> · <a href="index.html">← all tools</a> · Click headers to sort</p>
+<div id="status">⏳ Loading item data from mewgenics.wiki…</div>
+
+<div class="controls" id="controls" style="display:none">
+  <input type="search" id="srch" placeholder="Search name or description…" oninput="render()">
+  <div class="filter-btns" id="slotBtns"></div>
+</div>
+<div class="row2" id="row2" style="display:none">
+  <div class="rar-btns" id="rarBtns"></div>
+  <div class="flag-btns" id="flagBtns"></div>
+  <div class="view-btns" id="viewBtns">
+    <button id="viewTable" class="active" onclick="setView('table')" title="Table view">▤ Table</button>
+    <button id="viewCards" onclick="setView('cards')" title="Card grid view">▦ Cards</button>
+  </div>
+  <button class="dl-btn" onclick="downloadCSV()">⬇ Download CSV</button>
+</div>
+<div class="count" id="cnt"></div>
+
+<div class="tbl-wrap" id="tblWrap">
+  <div class="loader" id="loader">Loading…</div>
+</div>
+
+<script>
+// ---- inline stat/status glyphs (same set as the abilities page) ----
+const STAT_LABELS = { str:'STR', dex:'DEX', con:'CON', int:'INT', spd:'SPD', cha:'CHA', lck:'LCK', hp:'HP', mp:'MP', mana:'MP', divineshield:'DIV' };
+const TOKEN_SVG = {
+  str:'<svg viewBox="0 0 24 24"><g fill="#e23b3b"><rect x="2" y="8" width="3" height="8" rx="1"/><rect x="5" y="9.5" width="2" height="5" rx="1"/><rect x="7" y="11" width="10" height="2" rx="1"/><rect x="17" y="9.5" width="2" height="5" rx="1"/><rect x="19" y="8" width="3" height="8" rx="1"/></g></svg>',
+  dex:'<svg viewBox="0 0 24 24"><path fill="#0ea5e9" d="M12 2 19 11 H14 V22 H10 V11 H5 Z"/></svg>',
+  con:'<svg viewBox="0 0 24 24"><path fill="#e67e22" d="M12 21C12 21 3 14.5 3 8.7 3 5.8 5.3 3.6 8 3.6c1.8 0 3.3 1 4 2.2.7-1.2 2.2-2.2 4-2.2 2.7 0 5 2.2 5 5.1C21 14.5 12 21 12 21Z"/></svg>',
+  int:'<svg viewBox="0 0 24 24"><path fill="#6366f1" d="M4 4h6a2 2 0 0 1 2 2v14a2.5 2.5 0 0 0-2-1H4Z"/><path fill="#a5b4fc" d="M20 4h-6a2 2 0 0 0-2 2v14a2.5 2.5 0 0 1 2-1h6Z"/></svg>',
+  spd:'<svg viewBox="0 0 24 24"><path fill="#f5b914" d="M13 2 4 14h7l-2 8 11-13h-8z"/></svg>',
+  cha:'<svg viewBox="0 0 24 24"><path fill="#ec4899" d="M12 2l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4 5.9 20.5l1.2-6.5L2.3 8.9 8.9 8z"/></svg>',
+  lck:'<svg viewBox="0 0 24 24"><g fill="#16a34a"><circle cx="9" cy="9" r="4.2"/><circle cx="15" cy="9" r="4.2"/><circle cx="9" cy="15" r="4.2"/><circle cx="15" cy="15" r="4.2"/></g><rect x="11.3" y="13" width="1.4" height="8" fill="#15803d"/></svg>',
+  shield:'<svg viewBox="0 0 24 24"><path fill="#64748b" d="M12 2 20 5v6c0 5-3.6 9-8 11-4.4-2-8-6-8-11V5z"/></svg>',
+  divineshield:'<svg viewBox="0 0 24 24"><path fill="#eab308" d="M12 2 20 5v6c0 5-3.6 9-8 11-4.4-2-8-6-8-11V5z"/><path fill="#fffbe6" d="M12 7l1.3 2.7 3 .4-2.2 2.1.5 2.9L12 15.8 9.4 17.2l.5-2.9-2.2-2.1 3-.4z"/></svg>'
+};
+
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+// rewrite remote wiki image URLs to local copies under icons/ (works offline)
+function localImg(url){ return url ? url.replace('https://mewgenics.wiki/images/','icons/') : url; }
+function normKey(s){ return String(s||'').toLowerCase().replace(/[^a-z0-9]/g,''); }
+
+// Render [img:token] / [s:N] description markup, same as the abilities page
+function renderDesc(raw){
+  if(!raw) return '';
+  const parts = raw.split(/(\[[^\]]+\])/g);
+  let out='';
+  for(let i=0;i<parts.length;i++){
+    const part=parts[i];
+    const m=part.match(/^\[(?:img:)?([^\]]+)\]$/i);
+    if(m){
+      const token=m[1].trim();
+      const sOpen=token.match(/^s:(\d*\.?\d+)$/i);
+      if(sOpen){ out+='<span style="font-size:'+Math.round(parseFloat(sOpen[1])*100)+'%;opacity:.75">'; continue; }
+      if(token==='/s'){ out+='</span>'; continue; }
+      if(token==='n'){ out+='<br>'; continue; }
+      const isImg=/^\[\s*img:/i.test(part);
+      const key=normKey(token);
+      if(isImg){
+        const svg=TOKEN_SVG[key];
+        if(svg) out+='<span class="status-icon" title="'+esc(token)+'">'+svg+'</span>';
+        else out+='<span class="status-badge" title="'+esc(token)+'">'+esc(STAT_LABELS[key]||token)+'</span>';
+      } else {
+        out+='<span class="unknown-token">'+esc(token)+'</span>';
+      }
+    } else {
+      out+=part.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\\n/g,'<br>');
+    }
+  }
+  return out;
+}
+
+// Render an item's stats object ({shield:4, con:2}) as icon+value chips
+function renderStats(stats){
+  if(!stats) return '<span style="color:#bbb">—</span>';
+  const keys=Object.keys(stats);
+  if(!keys.length) return '<span style="color:#bbb">—</span>';
+  return keys.map(k=>{
+    const key=normKey(k);
+    const svg=TOKEN_SVG[key];
+    const v=stats[k];
+    const sign=(typeof v==='number'&&v>0)?'+':'';
+    const label=STAT_LABELS[key]||k;
+    const ic = svg ? '<span class="status-icon">'+svg+'</span>' : '<span class="stat-name">'+esc(label)+' </span>';
+    return '<span class="stat-chip" title="'+esc(label)+'">'+ic+sign+esc(String(v))+'</span>';
+  }).join('');
+}
+
+// ---- data + config ----
+const SLOT_ORDER = ['head','face','neck','weapon','trinket'];
+const SLOT_LABEL = { head:'Head', face:'Face', neck:'Neck', weapon:'Weapon', trinket:'Trinket', modifier:'Modifier' };
+const RARITY_ORDER = ['common','uncommon','rare','very_rare','quest','sidequest'];
+const RARITY_LABEL = { common:'Common', uncommon:'Uncommon', rare:'Rare', very_rare:'Very Rare', quest:'Quest', sidequest:'Sidequest', medium:'Medium' };
+function normRarity(r){ if(!r) return ''; r=String(r).toLowerCase(); if(r==='uncommmon')return 'uncommon'; return r; }
+
+let allItems = [];
+let activeSlot='all', activeRarity='all', cursedOnly=false, consumableOnly=false;
+let viewMode='table', sortCol=-1, sortDir=1;
+
+function str(v){
+  if(v==null) return '';
+  if(typeof v==='string') return v;
+  if(typeof v==='object') return v.en || v.value || String(Object.values(v)[0]||'');
+  return String(v);
+}
+
+async function loadData(){
+  try{
+    const res=await fetch('https://mewgenics.wiki/api/v1/items.json');
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const json=await res.json();
+    const records=json.records||json;
+    if(!Array.isArray(records)) throw new Error('Unexpected data format');
+    allItems=records.map(r=>({
+      id:str(r.id),
+      name:str(r.name||r.id),
+      slot:String(r.kind||''),
+      rarity:normRarity(r.rarity),
+      cursed:!!r.cursed,
+      consumable:!!r.is_consumable,
+      stats:(r.stats&&Object.keys(r.stats).length)?r.stats:null,
+      sets:Array.isArray(r.sets)?r.sets:[],
+      desc:str(r.description),
+      icon:localImg(str(r.icon_url||''))
+    })).filter(r=>r.name);
+    document.getElementById('status').textContent='✅ Loaded '+allItems.length+' items';
+    buildUI();
+    render();
+  }catch(err){
+    document.getElementById('status').innerHTML='⚠️ Could not load live data: '+esc(err.message)+'.';
+    document.getElementById('loader').innerHTML='<div class="error-box"><strong>Item data unavailable.</strong> The mewgenics.wiki API couldn\'t be reached (CORS or network). '+
+      'You can <a href="https://mewgenics.wiki/api/v1/items.json" target="_blank">open the JSON directly</a> or refresh.</div>';
+  }
+}
+
+function buildUI(){
+  // Slot buttons
+  const sb=document.getElementById('slotBtns'); sb.innerHTML='';
+  [['all','All slots'], ...SLOT_ORDER.map(s=>[s,SLOT_LABEL[s]])].forEach(([val,label])=>{
+    const b=document.createElement('button'); b.textContent=label;
+    if(val==='all') b.classList.add('active');
+    b.onclick=()=>{ activeSlot=val; sb.querySelectorAll('button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); render(); };
+    sb.appendChild(b);
+  });
+  // Rarity buttons (only those present)
+  const present=new Set(allItems.map(r=>r.rarity).filter(Boolean));
+  const rb=document.getElementById('rarBtns'); rb.innerHTML='';
+  [['all','All rarities'], ...RARITY_ORDER.filter(r=>present.has(r)).map(r=>[r,RARITY_LABEL[r]])].forEach(([val,label])=>{
+    const b=document.createElement('button'); b.textContent=label;
+    if(val==='all') b.classList.add('active');
+    b.onclick=()=>{ activeRarity=val; rb.querySelectorAll('button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); render(); };
+    rb.appendChild(b);
+  });
+  // Flag toggles
+  const fb=document.getElementById('flagBtns'); fb.innerHTML='';
+  const cu=document.createElement('button'); cu.textContent='😈 Cursed';
+  cu.onclick=()=>{ cursedOnly=!cursedOnly; cu.classList.toggle('active',cursedOnly); render(); };
+  const co=document.createElement('button'); co.textContent='🧪 Consumable';
+  co.onclick=()=>{ consumableOnly=!consumableOnly; co.classList.toggle('active',consumableOnly); render(); };
+  fb.appendChild(cu); fb.appendChild(co);
+
+  document.getElementById('controls').style.display='flex';
+  document.getElementById('row2').style.display='flex';
+}
+
+function setView(mode){
+  if(mode===viewMode) return;
+  viewMode=mode;
+  document.getElementById('viewTable').classList.toggle('active',mode==='table');
+  document.getElementById('viewCards').classList.toggle('active',mode==='cards');
+  render();
+}
+
+function getVisible(){
+  const q=document.getElementById('srch').value.toLowerCase();
+  return allItems.filter(r=>{
+    if(activeSlot!=='all' && r.slot!==activeSlot) return false;
+    if(activeRarity!=='all' && r.rarity!==activeRarity) return false;
+    if(cursedOnly && !r.cursed) return false;
+    if(consumableOnly && !r.consumable) return false;
+    if(q){
+      const hay=(r.name+' '+r.desc+' '+r.slot+' '+(r.sets||[]).join(' ')+' '+(RARITY_LABEL[r.rarity]||'')).toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function getSorted(){
+  let rows=getVisible();
+  if(sortCol>=0){
+    const keys=['name','slot','rarity','set'];
+    rows=[...rows].sort((a,b)=>{
+      const key=keys[sortCol];
+      if(key==='rarity'){ const ai=RARITY_ORDER.indexOf(a.rarity), bi=RARITY_ORDER.indexOf(b.rarity); return (ai-bi)*sortDir; }
+      const av=(key==='set'?(a.sets[0]||''):(a[key]||'')).toLowerCase();
+      const bv=(key==='set'?(b.sets[0]||''):(b[key]||'')).toLowerCase();
+      return av<bv?-sortDir:av>bv?sortDir:0;
+    });
+  }
+  return rows;
+}
+
+function iconHtml(r){
+  return r.icon
+    ? '<img class="item-icon" src="'+esc(r.icon)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">'
+    : '<span class="item-icon-missing"></span>';
+}
+function slotBadge(r){ return r.slot ? '<span class="slot-badge">'+esc(SLOT_LABEL[r.slot]||r.slot)+'</span>' : '—'; }
+function rarBadge(r){ return r.rarity ? '<span class="rar-badge rar-'+r.rarity+'">'+esc(RARITY_LABEL[r.rarity]||r.rarity)+'</span>' : '<span style="color:#aaa">—</span>'; }
+function flags(r){ return (r.cursed?'<span class="flag flag-cursed">CURSED</span>':'')+(r.consumable?'<span class="flag flag-consumable">CONSUMABLE</span>':''); }
+function setTag(r){ return (r.sets&&r.sets.length) ? '<span class="set-tag">'+esc(r.sets.join(', '))+'</span>' : '<span style="color:#bbb">—</span>'; }
+
+function render(){
+  const wrap=document.getElementById('tblWrap'); if(!wrap) return;
+  const rows=getSorted();
+  if(!rows.length){
+    wrap.className='tbl-wrap as-cards';
+    wrap.innerHTML='<div class="no-results">No items match</div>';
+    document.getElementById('cnt').textContent='No items match';
+    return;
+  }
+  if(viewMode==='cards') renderCards(wrap,rows); else renderTableView(wrap,rows);
+  document.getElementById('cnt').textContent='Showing '+rows.length+' of '+allItems.length+' items';
+}
+
+function renderTableView(wrap,rows){
+  wrap.className='tbl-wrap';
+  wrap.innerHTML=`
+    <table>
+      <thead><tr>
+        <th></th>
+        <th onclick="sortBy(0)">Item</th>
+        <th onclick="sortBy(1)">Slot</th>
+        <th onclick="sortBy(2)">Rarity</th>
+        <th>Stats</th>
+        <th onclick="sortBy(3)">Set</th>
+      </tr></thead>
+      <tbody>${rows.map(r=>`<tr>
+        <td class="icon-cell">${iconHtml(r)}</td>
+        <td><strong style="font-weight:600">${esc(r.name)}</strong>${flags(r)}
+          ${r.desc?`<div class="desc">${renderDesc(r.desc)}</div>`:''}</td>
+        <td>${slotBadge(r)}</td>
+        <td>${rarBadge(r)}</td>
+        <td>${renderStats(r.stats)}</td>
+        <td>${setTag(r)}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  if(sortCol>=0){ const th=wrap.querySelectorAll('thead th')[sortCol+1]; if(th) th.classList.add(sortDir===1?'sort-asc':'sort-desc'); }
+}
+
+function renderCards(wrap,rows){
+  wrap.className='tbl-wrap as-cards';
+  wrap.innerHTML=`<div class="cards">${rows.map(r=>`
+    <div class="it-card rbd-${r.rarity}" title="${esc(SLOT_LABEL[r.slot]||r.slot)}${r.rarity?' · '+(RARITY_LABEL[r.rarity]||r.rarity):''}">
+      ${r.cursed?'<span class="it-card-corner" title="Cursed">😈</span>':(r.consumable?'<span class="it-card-corner" title="Consumable">🧪</span>':'')}
+      <div class="it-card-name">${esc(r.name)}</div>
+      <div class="it-card-row">
+        <span class="it-card-icon">${iconHtml(r)}</span>
+        <div class="it-card-body">
+          <div class="it-card-desc">${r.desc?renderDesc(r.desc):'<span style="color:#bbb">—</span>'}</div>
+          <div class="it-card-stats">${renderStats(r.stats)}</div>
+        </div>
+      </div>
+    </div>`).join('')}</div>`;
+}
+
+function sortBy(col){
+  if(sortCol===col) sortDir*=-1; else { sortCol=col; sortDir=1; }
+  render();
+}
+
+function downloadCSV(){
+  const rows=getSorted();
+  const e=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  let csv='Item,Slot,Rarity,Cursed,Consumable,Stats,Set,Description\n';
+  rows.forEach(r=>{
+    const stats=r.stats?Object.entries(r.stats).map(([k,v])=>k+' '+(v>0?'+':'')+v).join('; '):'';
+    csv+=[e(r.name),e(SLOT_LABEL[r.slot]||r.slot),e(RARITY_LABEL[r.rarity]||r.rarity),e(r.cursed?'yes':''),e(r.consumable?'yes':''),e(stats),e((r.sets||[]).join('; ')),e(r.desc)].join(',')+'\n';
+  });
+  const blob=new Blob([csv],{type:'text/csv'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='mewgenics-items.csv'; a.click();
+}
+
+loadData();
+</script>
+</body>
+</html>

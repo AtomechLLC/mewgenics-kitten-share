@@ -1,0 +1,14 @@
+node_modules/
+.DS_Store
+*.log
+data/game/
+
+# Dev-only: scratch diagnostics + spikes (also holds a raw catparts.swf — never publish game IP)
+.scratch/
+public/__*
+
+# Never commit real player save files (privacy — "your save never leaves your device")
+*.sav
+*.savbackup
+*.gpak
+diffsaves/

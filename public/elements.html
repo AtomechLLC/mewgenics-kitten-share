@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mewgenics — Element Interactions</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,sans-serif;font-size:14px;color:#222;background:#f7f3ec;padding:1.5rem;max-width:1100px;margin:0 auto}
+  h1{font-size:20px;font-weight:600;margin-bottom:4px}
+  .subtitle{font-size:13px;color:#666;margin-bottom:1.5rem}
+  .subtitle a{color:#2d6a4f}
+  h2{font-size:15px;font-weight:600;margin:1.6rem 0 .7rem;display:flex;align-items:center;gap:8px}
+  h2 .hint{font-size:11px;font-weight:400;color:#999}
+
+  /* element legend */
+  .elements{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
+  .el{display:flex;gap:9px;align-items:flex-start;background:#fff;border:1px solid #e5e7eb;border-left:4px solid var(--ec,#999);border-radius:8px;padding:8px 10px}
+  .el .glyph{font-size:20px;line-height:1.2;flex:none}
+  .el .en{font-weight:700;font-size:13px;color:var(--ec)}
+  .el .ed{font-size:11.5px;color:#555;line-height:1.4;margin-top:1px}
+
+  /* reaction equation cards */
+  .reactions{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:10px}
+  .rx{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+  .rx-eq{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+  .chip{display:inline-flex;align-items:center;gap:5px;font-weight:700;font-size:13px;padding:4px 10px;border-radius:20px;color:#fff;white-space:nowrap}
+  .chip .g{font-size:15px}
+  .chip.ghost{background:#f1f5f9;color:#334155;border:1px solid #e2e8f0}
+  .op{font-size:16px;font-weight:700;color:#94a3b8}
+  .arrow{font-size:17px;font-weight:700;color:#475569}
+  .rx-note{font-size:11.5px;color:#666;margin-top:8px;line-height:1.45}
+
+  /* status reference */
+  .statuses{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px}
+  .st{background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:8px 11px}
+  .st .sn{font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px}
+  .st .sd{font-size:11.5px;color:#555;line-height:1.45;margin-top:2px}
+
+  .src{margin-top:1.8rem;font-size:11.5px;color:#888;background:#fbf9f4;border:1px dashed #d8d0c0;border-radius:8px;padding:10px 12px;line-height:1.55}
+  .src b{color:#6b5d44}
+  .quote{font-style:italic;color:#6b6356;margin-top:6px}
+</style>
+</head>
+<body>
+
+<h1>Mewgenics — Element Interactions</h1>
+<p class="subtitle">How the elements react with each other, their tiles, and statuses · <a href="index.html">← all tools</a> · sourced from the game files</p>
+
+<h2>🔮 The Elements <span class="hint">what each one does</span></h2>
+<div class="elements" id="elements"></div>
+
+<h2>⚗️ Reactions <span class="hint">verified element combos</span></h2>
+<div class="reactions" id="reactions"></div>
+
+<h2>🩹 Elemental statuses <span class="hint">the states elements apply</span></h2>
+<div class="statuses" id="statuses"></div>
+
+<div class="src" id="src"></div>
+
+<script>
+// ---- elements (color matches the abilities-page element filter) ----
+const ELEMENTS = [
+  { key:'fire',      name:'Fire',      glyph:'🔥', color:'#dc2626', does:'Applies Burn (damage each turn). Ignites flammable & tarred things. Lays Fire tiles.' },
+  { key:'water',     name:'Water',     glyph:'💧', color:'#0891b2', does:'Makes targets Wet, puts out fires, and grows grass on grass tiles.' },
+  { key:'ice',       name:'Ice / Cold',glyph:'❄️', color:'#0369a1', does:'Slows targets down — and freezes Wet targets solid.' },
+  { key:'electric',  name:'Electric',  glyph:'⚡', color:'#d97706', does:'Conducts through Wet targets and metal, chaining the hit. Can Stun.' },
+  { key:'grass',     name:'Grass',     glyph:'🌿', color:'#16a34a', does:'Grown by Water. Grass and plants are flammable.' },
+  { key:'poison',    name:'Poison',    glyph:'☠️', color:'#65a30d', does:'Applies Poison: damage each turn and weakened healing.' },
+  { key:'holy',      name:'Holy',      glyph:'✨', color:'#f59e0b', does:'Holy/radiant damage.' },
+  { key:'wind',      name:'Wind',      glyph:'🌬️', color:'#0d9488', does:'Pushes things around. Fans fire — adds Burn and spreads flames.' },
+  { key:'gravity',   name:'Gravity',   glyph:'🌀', color:'#7c3aed', does:'Knockback, pull & Slow. Slam units into walls or each other for collision damage.' },
+  { key:'earth',     name:'Earth',     glyph:'⛰️', color:'#92400e', does:'Earth & rock.' },
+  { key:'explosion', name:'Explosion', glyph:'💥', color:'#ea580c', does:'Explosive blast damage.' },
+];
+const EC = Object.fromEntries(ELEMENTS.map(e=>[e.key,e]));
+
+// chip helpers
+function chip(key,labelOverride){ const e=EC[key]; return '<span class="chip" style="background:'+e.color+'"><span class="g">'+e.glyph+'</span>'+(labelOverride||e.name)+'</span>'; }
+function ghost(glyph,label){ return '<span class="chip ghost"><span class="g">'+glyph+'</span>'+label+'</span>'; }
+
+// ---- reactions (from in-game text + game knowledge — see source note) ----
+const REACTIONS = [
+  { eq:[chip('water'),'op',chip('fire'),'arrow',ghost('💨','Extinguished')], note:'Water puts out fires with ease.' },
+  { eq:[chip('wind'),'op',chip('fire'),'arrow',ghost('🔥','More Burn + spreads')], note:'Wind fans the flames — adds Burn stacks and blows the fire across the battlefield.' },
+  { eq:[chip('ice','Cold'),'op',ghost('💧','Wet'),'arrow',ghost('🧊','Frozen')], note:'Wet things hit by cold freeze solid (Frozen: can\'t take damage until it thaws).' },
+  { eq:[chip('electric'),'op',ghost('💧','Wet / Metal'),'arrow',ghost('🔗','Conducts')], note:'Electricity chains through anything electrically conductive — wet targets and metal.' },
+  { eq:[chip('fire'),'op',ghost('🛢️','Flammable / Tarred'),'arrow',ghost('🔥','Burns up')], note:'Flammable items burn up when hit with fire; tar makes things flammable.' },
+  { eq:[chip('water'),'op',ghost('🟫','Grass tile'),'arrow',chip('grass','Grows grass')], note:'Water element can grow grass on the battlefield.' },
+  { eq:[chip('gravity'),'op',ghost('🧱','Wall / unit'),'arrow',ghost('💥','Collision damage')], note:'Gravity is positional, not elemental: knock a unit into a wall or another unit for bonus collision damage. Chain Knockback passes it on to whatever they hit.' },
+  { eq:[chip('water'),'arrow',ghost('💧','Wet')], note:'Water makes targets Wet — the setup for Freeze and Electric chains.' },
+  { eq:[chip('ice','Cold'),'arrow',ghost('🐌','Slow')], note:'Cold slows targets down.' },
+  { eq:[chip('fire'),'arrow',ghost('🔥','Burn')], note:'Fire applies Burn — damage at the start of each turn.' },
+];
+
+// ---- elemental statuses (from keyword tooltips) ----
+const STATUSES = [
+  { n:'💧 Wet',       d:'Wet. Freezes solid if hit by cold, and conducts electricity.' },
+  { n:'🧊 Frozen',    d:'Cannot take damage. Unfreezes at the start of its turn.' },
+  { n:'🔥 Burn',      d:'Takes damage at the start of its turn, then Burn drops by 1.' },
+  { n:'☠️ Poison',    d:'Takes damage each turn; incoming healing is less effective.' },
+  { n:'🐌 Slow',      d:'Reduced speed (initiative).' },
+  { n:'🛢️ Tarred',    d:'Speed decreased, and becomes Flammable.' },
+  { n:'🪵 Flammable', d:'Burns up when hit with fire.' },
+  { n:'🔩 Metal',     d:'Electrically conductive — electricity chains through it.' },
+];
+
+function render(){
+  document.getElementById('elements').innerHTML = ELEMENTS.map(e=>
+    `<div class="el" style="--ec:${e.color}"><span class="glyph">${e.glyph}</span><div><div class="en">${e.name}</div><div class="ed">${e.does}</div></div></div>`
+  ).join('');
+  document.getElementById('reactions').innerHTML = REACTIONS.map(r=>
+    `<div class="rx"><div class="rx-eq">${r.eq.map(part=>part==='op'?'<span class="op">+</span>':part==='arrow'?'<span class="arrow">→</span>':part).join('')}</div><div class="rx-note">${r.note}</div></div>`
+  ).join('');
+  document.getElementById('statuses').innerHTML = STATUSES.map(s=>
+    `<div class="st"><div class="sn">${s.n}</div><div class="sd">${s.d}</div></div>`
+  ).join('');
+  document.getElementById('src').innerHTML =
+    '<b>Source:</b> most reactions and statuses are taken from the game’s own text in <code>resources.gpak</code> — ' +
+    'Butch’s in-game element tips and the keyword tooltips (<code>data/text/combined.csv</code>, <code>data/keyword_tooltips.gon</code>), ' +
+    'plus the tile palette (<code>data/tiles.gon</code>). A few combos (e.g. Wind fanning Fire) come from in-game behaviour that isn’t spelled out in the text.' +
+    '<div class="quote">“There are tons of elemental combos to play with. Experimentation is key!” — Butch. ' +
+    'Many element pairings (Holy, Gravity, Earth, Explosion…) still aren’t documented, so this list isn’t exhaustive.</div>';
+}
+render();
+</script>
+</body>
+</html>
