@@ -17,6 +17,27 @@
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:Arial,sans-serif;font-size:14px;color:#222;background:#f7f3ec;padding:1.5rem}
+  /* Hand-drawn card font. SELF-HOSTED: drop a woff2 at the path below and it upgrades with no
+     code change. Until then it falls back to a system hand-font (Comic Sans/Chalkboard/Comic
+     Neue), which already gives the Mewgenics feel. Recommended file: Patrick Hand (SIL OFL, free)
+     -> public/kittenshare/fonts/PatrickHand-Regular.woff2 */
+  @font-face{
+    font-family:'KittenHand';
+    src:url('kittenshare/fonts/PatrickHand-Regular.woff2') format('woff2');
+    font-weight:400 800; font-display:swap;
+  }
+  /* --- Mewgenics scrapbook theme: aged paper, bold ink outlines, muted palette, taped tags --- */
+  :root{
+    --hand:'KittenHand','Comic Sans MS','Chalkboard SE','Comic Neue',ui-rounded,cursive;
+    --paper:#f2ead6; --paper2:#e9dfc6; --paper3:#fbf6e9;
+    --ink:#2b2622; --ink-soft:#5b5449;
+    --tape:rgba(210,196,150,.55);
+    --off:#a4514a; --def:#56748f; --oth:#6f8a4a; --spe:#c0913f;   /* muted category colours */
+  }
+  /* faint paper speckle, reusable */
+  .paperbg{background-color:var(--paper);
+    background-image:radial-gradient(rgba(90,70,40,.05) 1px,transparent 1px),linear-gradient(rgba(0,0,0,.02),rgba(0,0,0,0));
+    background-size:5px 5px,100% 100%}
   h1{font-size:20px;font-weight:600;margin-bottom:4px}
   .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
   .topbar h1{margin-bottom:0}
@@ -38,18 +59,41 @@
   .controls input[type="search"]{padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;width:220px}
   .wip{background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:8px;font-size:12px;padding:7px 11px;margin-bottom:12px;line-height:1.5}
   .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
-  .kcard{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:10px;display:flex;flex-direction:column;align-items:center}
+  .kcard{font-family:var(--hand);background-color:var(--paper3);
+    background-image:radial-gradient(rgba(90,70,40,.045) 1px,transparent 1px);background-size:5px 5px;
+    border:2.5px solid var(--ink);
+    border-radius:16px 11px 15px 12px/12px 15px 11px 16px;   /* hand-drawn wobble */
+    padding:12px;display:flex;flex-direction:column;align-items:center;color:var(--ink);
+    box-shadow:2px 3px 0 rgba(43,38,34,.14)}
   .kcard .portrait{width:150px;height:150px}
   /* Name row mirrors the game's banner: class emblem, name, then the ♂/♀ glyph. Both glyphs
      are currentColor art, so they inherit the name's colour. */
-  .kcard .kname{font-weight:700;font-size:14px;margin-top:4px;display:flex;align-items:center;
-    justify-content:center;gap:5px;color:#2b2b2b;text-align:center}
+  /* Name = a torn-paper ribbon banner. Text/emblems ride ON TOP (crisp); a ::before backing is
+     roughened by the #torn filter for the hand-torn edge, and the whole thing tilts slightly. */
+  .kcard .kname{position:relative;font-weight:800;font-size:15px;margin-top:8px;display:inline-flex;
+    align-items:center;justify-content:center;gap:6px;color:var(--ink);text-align:center;
+    padding:3px 18px;transform:rotate(-1.2deg);isolation:isolate}
+  .kcard .kname::before{content:"";position:absolute;inset:-1px -2px;z-index:-1;
+    background:var(--paper3);border:2.5px solid var(--ink);
+    filter:url(#torn);box-shadow:1px 2px 0 rgba(43,38,34,.16)}
+  .single .kname{font-size:19px;padding:4px 22px}
   .kcard .kemblem{width:15px;height:15px;flex:0 0 15px;display:block;opacity:.85}
   .kcard .ksex{width:11px;height:11px;flex:0 0 11px;display:block;opacity:.7}
   .single .kname{font-size:17px;gap:7px}
   .single .kemblem{width:19px;height:19px;flex-basis:19px}
   .single .ksex{width:14px;height:14px;flex-basis:14px}
-  .kcard .kmeta{font-size:11.5px;color:#777;margin-top:2px;text-align:center}
+  .kcard .kmeta{font-size:11.5px;color:var(--ink-soft);font-weight:600;margin-top:3px;text-align:center}
+  /* Age as a small taped tag, like the game's "Age" label. */
+  .kcard .kage{display:inline-block;font-size:10px;font-weight:700;color:var(--ink);background:var(--paper);
+    border:1.5px solid var(--ink);border-radius:6px 4px 5px 4px/4px 5px 4px 6px;padding:0 6px;margin-left:4px;
+    transform:rotate(-1deg);vertical-align:1px}
+  /* Taped paper tags: age / room / status / size / level — muted, slightly askew like the game. */
+  .kcard .ktag,.kcard .kroom,.kcard .kdead,.kcard .ksize{display:inline-block;font-size:10.5px;font-weight:700;
+    background:var(--paper);color:var(--ink);border:2px solid var(--ink);
+    border-radius:7px 5px 6px 5px/5px 6px 5px 7px;padding:1px 8px;margin-top:5px;line-height:1.45;
+    box-shadow:1px 1px 0 rgba(43,38,34,.12)}
+  .kcard .kroom{transform:rotate(-1.4deg)} .kcard .kdead{transform:rotate(1.2deg);color:#7a2f2f}
+  .kcard .ksize{transform:rotate(-1deg);color:#7a4a1e}
   /* Only 'dead' is decodable; 'alive' is the default and gets no badge (and does NOT mean
      the cat is in the house). */
   .kcard .kroom{font-size:10.5px;color:#2d5a3d;background:#e7f3ea;border:1px solid #c2dccb;
@@ -57,54 +101,58 @@
   .kcard .kdead{font-size:10.5px;color:#6b2d2d;background:#f7e6e6;border:1px solid #e3c2c2;
     border-radius:9px;padding:1px 7px;margin-top:3px;display:inline-block;line-height:1.4}
   .kcard .ksize{font-size:10.5px;color:#7a4a1e;background:#fdeede;border:1px solid #f2d3ac;border-radius:9px;padding:1px 7px;margin-top:3px;display:inline-block;line-height:1.4}
-  .kcard .kitem{font-size:10.5px;color:#334;background:#eef4fb;border:1px solid #cfe0f0;border-radius:7px;padding:3px 7px;margin-top:6px;line-height:1.6;text-align:center}
-  .kcard .kitem b{color:#1d5a96;font-weight:700}
-  .kcard .kitem .islot{color:#6a7c8c}
+  .kcard .kitem{font-size:10.5px;color:var(--ink);background:var(--paper);border:2px solid var(--ink);border-radius:8px 6px 7px 6px/6px 7px 6px 8px;padding:3px 8px;margin-top:6px;line-height:1.6;text-align:center}
+  .kcard .kitem b{color:var(--ink);font-weight:800}
+  .kcard .kitem .islot{color:var(--ink-soft)}
   /* Abilities sit BELOW the stat block, like the game's sheet, and each is a full row:
      [real icon] name + what it does. Rows (not inline chips) because the descriptions are
      sentences and need the width. */
   .kcard .kabil{width:100%;margin-top:6px;display:flex;flex-direction:column;gap:3px}
-  .kcard .kabil-i{background:#eef2f7;border:1px solid #dde5ee;border-radius:8px;padding:4px 6px;
-    display:flex;align-items:flex-start;gap:5px;text-align:left;border-left:3px solid #cbd5e1}
-  /* Left edge coloured by the game's spellbook CATEGORY, matching the wiki cards. */
-  .kcard .kabil-i.cat-Offense{border-left-color:#dc2626}
-  .kcard .kabil-i.cat-Defense{border-left-color:#2563eb}
-  .kcard .kabil-i.cat-Other{border-left-color:#16a34a}
-  .kcard .kabil-i.cat-Special{border-left-color:#f59e0b}
-  .kcard .kabil-cat{width:13px;height:13px;flex:none;margin-left:auto;align-self:center;opacity:.9}
+  .kcard .kabil-i{background:var(--paper);border:2px solid var(--ink);border-radius:10px 7px 9px 8px/8px 9px 7px 10px;padding:5px 7px;
+    display:flex;align-items:flex-start;gap:6px;text-align:left;border-left:5px solid var(--ink)}
+  /* Left edge coloured by the game's spellbook CATEGORY (muted to fit the aged palette). */
+  .kcard .kabil-i.cat-Offense{border-left-color:var(--off)}
+  .kcard .kabil-i.cat-Defense{border-left-color:var(--def)}
+  .kcard .kabil-i.cat-Other{border-left-color:var(--oth)}
+  .kcard .kabil-i.cat-Special{border-left-color:var(--spe)}
+  /* Category symbol sits top-right like the game's spellbook card corner. */
+  .kcard .kabil-cat{width:15px;height:15px;flex:none;margin-left:auto;align-self:flex-start;margin-top:-1px}
   /* Real multi-colour game art — never tinted, unlike the mono ui-icons glyphs. */
-  .kcard .kabicon{width:18px;height:18px;flex:0 0 18px;display:block;margin-top:1px}
+  /* Ability icon sits in a framed WELL, like the game's spellbook card icon slot. */
+  .kcard .kabicon{width:26px;height:26px;flex:0 0 26px;display:block;background:var(--paper3);
+    border:1.5px solid var(--ink);border-radius:6px 5px 6px 5px/5px 6px 5px 6px;padding:1px;box-shadow:inset 0 0 0 1px rgba(43,38,34,.06)}
   .kcard .kabil-t{min-width:0;flex:1}
   /* Mana cost, mirroring the readout the game puts on each ability card. */
-  .kcard .kabil-mp{flex:0 0 auto;align-self:center;font-size:10px;font-weight:700;color:#2d5a8a;
-    background:#dbe7f5;border:1px solid #b9cfe6;border-radius:9px;min-width:15px;padding:0 4px;text-align:center;line-height:1.6}
-  .kcard .kabil-t b,.kcard .kabil-n{font-size:11px;color:#1d3a5c;font-weight:700;display:block;line-height:1.35}
+  .kcard .kabil-mp{flex:0 0 auto;align-self:center;font-size:10px;font-weight:800;color:var(--paper3);
+    background:var(--def);border:1.5px solid var(--ink);border-radius:50%;width:18px;height:18px;padding:0;text-align:center;line-height:16px}
+  .kcard .kabil-t b,.kcard .kabil-n{font-size:11px;color:var(--ink);font-weight:800;display:block;line-height:1.35}
   .kcard .kabil-n{text-decoration:none}
   .kcard .kabil-n:hover{text-decoration:underline}
-  .kcard .kabil-d{font-size:10.5px;color:#556;line-height:1.4;display:block}
+  .kcard .kabil-d{font-size:10.5px;color:var(--ink-soft);line-height:1.4;display:block}
   /* [img:token] glyphs inline in a description — real art for the 7 stats, text badge else. */
   .kcard .ktok{width:11px;height:11px;display:inline-block;vertical-align:-1px;color:#2b2b2b}
   .kcard .ktokb{font-size:9px;font-weight:700;color:#41506b;background:#dde5ee;border-radius:4px;
     padding:0 3px;letter-spacing:.02em}
-  .single .kabicon{width:22px;height:22px;flex-basis:22px}
+  .single .kabicon{width:32px;height:32px;flex-basis:32px}
   .single .kabil-t b{font-size:12px}
   .single .kabil-d{font-size:11px}
   .kcard .unverified{font-size:10.5px;color:#8a6f2d;background:#fdf3d6;border:1px solid #f0dca0;border-radius:7px;padding:2px 7px;margin-top:5px;text-align:center;line-height:1.4}
-  .kcard .approx{font-size:10px;color:#5b6b7a;background:#eef2f7;border:1px solid #d6dee7;border-radius:7px;padding:2px 7px;margin-top:5px;text-align:center;line-height:1.35}
-  .kcard .kmut{font-size:10.5px;color:#553; background:#f3eefb;border:1px solid #e3d8f5;border-radius:7px;padding:3px 7px;margin-top:6px;line-height:1.5;text-align:center}
+  /* Render disclaimer as a subtle footnote at the card bottom (no frame). */
+  .kcard .approx{font-size:9px;color:var(--ink-soft);opacity:.7;padding:2px 6px;margin-top:8px;text-align:center;line-height:1.3;font-style:italic}
+  .kcard .kmut{font-size:10.5px;color:var(--ink); background:var(--paper);border:2px solid var(--ink);border-radius:8px 6px 7px 6px/6px 7px 6px 8px;padding:3px 8px;margin-top:6px;line-height:1.5;text-align:center}
   .kcard .kmut b{color:#6b3fa0;font-weight:700}
   .kcard .kmut .mreg{color:#8a6f2d;font-weight:700}
   .kcard .kmut .unknownmut{color:#a33}
   /* Stat block mirrors the in-game cat sheet: the game's own FontIcon_* glyphs
      (ui-icons.js) in two columns — STR/DEX/CON left, INT/SPD/CHA/LCK right — each
      with its value in a paper box. */
-  .kcard .kstats{display:flex;gap:10px;margin-top:6px;width:100%;justify-content:center;
-    background:#fdfcf7;border:1px solid #e0d9c6;border-radius:8px;padding:6px 8px}
+  .kcard .kstats{display:flex;gap:10px;margin-top:8px;width:100%;justify-content:center;
+    background:var(--paper);border:2px solid var(--ink);border-radius:11px 9px 10px 9px/9px 10px 9px 11px;padding:7px 9px}
   .kcard .kstatcol{display:flex;flex-direction:column;gap:3px}
   .kcard .kstat{display:flex;align-items:center;gap:5px;color:#2b2b2b}
   .kcard .kstat svg{width:15px;height:15px;flex:0 0 15px;display:block}
-  .kcard .kstat .kval{font-size:11.5px;font-weight:700;color:#2b2b2b;background:#fff;
-    border:1px solid #d5cfbc;border-radius:4px;padding:0 5px;min-width:23px;text-align:center;line-height:1.5}
+  .kcard .kstat .kval{font-size:11.5px;font-weight:800;color:var(--ink);background:var(--paper3);
+    border:1.5px solid var(--ink);border-radius:5px;padding:0 5px;min-width:23px;text-align:center;line-height:1.5}
   /* Internal-values triplet: [effective][base][modifier], mirroring the in-game sheet.
      The effective box is tinted only when a modifier actually moves it. */
   .kcard .keff{font-size:11.5px;font-weight:700;color:#1b4332;background:#e8f5ec;
@@ -125,22 +173,40 @@
   .kcard .kstat .kfb{font-size:9.5px;font-weight:700;color:#8a8272;width:15px;flex:0 0 15px;text-align:center}
   /* HP/MP/level are NOT in the game's 7-stat grid, so they sit on their own line. */
   .kcard .kstats-x{display:flex;flex-wrap:wrap;justify-content:center;gap:3px;margin-top:4px}
-  .kcard .kstats-x .stat{font-size:10.5px;color:#444;background:#f1efe7;border-radius:6px;padding:1px 6px}
-  .kcard .kstats-x .stat b{color:#2d6a4f;font-weight:700}
+  .kcard .kstats-x .stat{font-size:10.5px;color:var(--ink);background:var(--paper);border:1.5px solid var(--ink);border-radius:7px;padding:1px 7px;font-weight:700}
+  .kcard .kstats-x .stat b{color:var(--ink);font-weight:800}
   /* MP is computed from CHA, not read from the save — the ≈ marks it as derived so it is
      never read as a decoded value sitting next to the decoded HP. */
-  .kcard .kstats-x .stat.derived{background:#eef2f7;color:#41506b}
-  .kcard .kstats-x .stat.derived b{color:#41506b}
-  .kcard .kstats-x .stat.derived i{font-style:normal;color:#8a93a6}
-  .share-btn{margin-top:8px;padding:5px 14px;font-size:12px;border:none;border-radius:14px;background:#2d6a4f;color:#fff;cursor:pointer}
-  .share-btn:hover{background:#1b4332}
-  .share-btn.copied{background:#7e3af2}
+  .kcard .kstats-x .stat.derived{background:var(--paper2)}
+  .kcard .kstats-x .stat.derived i{font-style:normal;color:var(--ink-soft)}
+  .share-btn{margin-top:10px;padding:5px 16px;font-size:12px;font-weight:800;color:var(--paper3);
+    border:2px solid var(--ink);border-radius:12px 9px 11px 9px/9px 11px 9px 12px;background:#5f7d46;cursor:pointer;
+    box-shadow:1px 2px 0 rgba(43,38,34,.2)}
+  .share-btn:hover{background:#4d6838}
+  .share-btn.copied{background:#7a5aa8}
   .single{max-width:420px;margin:0 auto}
+  /* Hero card sits on TORN PAPER: move the paper/border to a ::before backing roughened by the
+     #torn filter so the whole card edge reads hand-torn, while the content stays crisp. Single
+     card only — the filter is skipped on the 120 grid cards to keep their paint cheap. */
+  .single.kcard{position:relative;isolation:isolate;border-color:transparent;background:none;box-shadow:none}
+  .single.kcard::before{content:"";position:absolute;inset:-1px;z-index:-1;
+    background-color:var(--paper3);
+    background-image:radial-gradient(rgba(90,70,40,.045) 1px,transparent 1px);background-size:5px 5px;
+    border:3px solid var(--ink);border-radius:18px 12px 16px 13px/13px 16px 12px 18px;
+    filter:url(#torn);box-shadow:3px 4px 0 rgba(43,38,34,.16)}
   .single .portrait{width:260px;height:260px}
   .no-results{text-align:center;color:#999;padding:2rem;font-style:italic}
 </style>
 </head>
 <body>
+<!-- Roughen filter for torn-paper edges (name banner, tags). feTurbulence-driven displacement
+     gives an organic hand-torn edge; applied to background layers only so text stays crisp. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <filter id="torn" x="-10%" y="-30%" width="120%" height="160%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.012 0.11" numOctaves="2" seed="7" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="5" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+</defs></svg>
 
 <div class="topbar">
   <h1>🐾 KittenShare</h1>
@@ -997,7 +1063,7 @@ function ageText(c){
   const why = died
     ? `age at death = death day (${esc(String(c.deathDay))}) − birth day (${esc(String(c.birthDay))})`
     : `age = current_day (${esc(String(CURRENT_DAY))}) − birth day (${esc(String(c.birthDay))}), floored at 1`;
-  return ` · <span class="kage" title="${why} — the save stores day stamps, not an age">Age ${esc(String(age))}</span>`;
+  return ` <span class="kage" title="${why} — the save stores day stamps, not an age">Age ${esc(String(age))}</span>`;
 }
 
 // The cat's life status. Only 'dead' is actually decodable today: the record's tail carries a
@@ -1300,9 +1366,9 @@ function kittenCard(c, big){
   // Capture the puppet's ingredients for the idle animator RIGHT HERE — renderPortrait.last is
   // overwritten by the next render, and the grid renders 120 cards after this one.
   if (big) kittenCard.pendingIdle = { cat: c, parts: renderPortrait.last };
+  // Section order mirrors the in-game card top-to-bottom: NAME ribbon, then meta/tags, then the
+  // stat grid, then the PORTRAIT in the middle, then abilities. (Previously portrait-first.)
   return `<div class="kcard${big?' single':''}">
-    <div class="portrait">${portrait}</div>
-    ${approx}
     <div class="kname">${classIcon(c.cls)}<span>${esc(c.name)}</span>${genderIcon(c.gender)}</div>
     <div class="kmeta">${esc(c.cls||'—')}${c.gender && !genderIcon(c.gender) ? ' · '+esc(c.gender) : ''}${ageText(c)}</div>
     ${roomBadge(c)}${statusBadge(c)}
@@ -1311,8 +1377,10 @@ function kittenCard(c, big){
     ${mutBlock(c)}
     ${itemBlock(c)}
     ${stats}
+    <div class="portrait">${portrait}</div>
     ${abils}
     ${(big || c.key == null)?'':`<button class="share-btn" data-key="${esc(String(c.key))}">🔗 Share link</button>`}
+    ${approx}
   </div>`;
 }
 
