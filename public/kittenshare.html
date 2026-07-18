@@ -117,6 +117,17 @@
   .kcard .kitem{font-size:10.5px;color:var(--ink);background:var(--paper);border:2px solid var(--ink);border-radius:8px 6px 7px 6px/6px 7px 6px 8px;padding:3px 8px;margin-top:6px;line-height:1.6;text-align:center}
   .kcard .kitem b{color:var(--ink);font-weight:800}
   .kcard .kitem .islot{color:var(--ink-soft)}
+  /* Equipped items as real in-game inventory slots: the itemboxbg_681 frame with the kind
+     emoji inside and the name beneath. */
+  .kcard .kitemgrid{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;margin-top:6px}
+  .kcard .kislot{width:54px;text-align:center}
+  .kcard .kislot .kibox{position:relative;width:44px;height:44px;margin:0 auto}
+  .kcard .kislot .kibox svg{width:44px;height:44px;display:block}
+  .kcard .kislot .kiemoji{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:19px;line-height:1}
+  .kcard .kislot .kiname{font-size:9px;font-weight:700;color:var(--ink);line-height:1.15;margin-top:1px;
+    overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .single .kislot{width:62px} .single .kislot .kibox{width:52px;height:52px} .single .kislot .kibox svg{width:52px;height:52px}
+  .single .kislot .kiemoji{font-size:23px}
   /* Abilities sit BELOW the stat block, like the game's sheet, and each is a full row:
      [real icon] name + what it does. Rows (not inline chips) because the descriptions are
      sentences and need the width. */
@@ -284,6 +295,8 @@
 <script src="kittenshare/ui-icons.js"></script>
 <script src="kittenshare/ability-categories.js"></script>
 <script src="kittenshare/item-ids.js"></script>
+<script src="kittenshare/ui-card.js"></script>   <!-- real HouseCatStatus chrome from ui.swf -->
+
 <!-- items.js (worn-item art, ~9 MB) is lazy-loaded by loadMonolith(), never eager. -->
 <script src="kittenshare/save-decode.js"></script>
 <script>
@@ -1441,14 +1454,40 @@ function injuryBlock(c){
 // compact list grouped by slot with an emoji per kind. Worn kinds (head/face/neck/weapon)
 // are the ones that also render on the portrait; trinket/modifier are inventory-only.
 const ITEM_KIND_ICON = { head:'👑', face:'😎', neck:'📿', weapon:'⚔️', trinket:'🎒', modifier:'✨' };
+// Inject reusable in-game UI art (ui-card.js) into the DOM ONCE as <symbol>s, so the ~69 KB
+// item-slot frame is defined a single time and every slot references it via <use>. Without
+// this, 120 grid cards would each inline the full frame body (multi-MB DOM). Idempotent.
+let __uiDefsInjected = false;
+function ensureUiDefs(){
+  if (__uiDefsInjected || typeof UI_CARD === 'undefined') return;
+  __uiDefsInjected = true;
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('style', 'position:absolute;width:0;height:0;overflow:hidden');
+  svg.setAttribute('aria-hidden', 'true');
+  const box = UI_CARD.itemBox;
+  svg.innerHTML = box ? `<defs>${box.defs}</defs><symbol id="ui-itembox" viewBox="${box.viewBox}">${box.body}</symbol>` : '';
+  document.body.appendChild(svg);
+}
 function itemBlock(c){
   const its = Array.isArray(c.items) ? c.items : [];
   if (!its.length) return '';
+  // Real in-game item-slot frame (itemboxbg_681 from ui.swf) around each item, with the kind
+  // emoji inside and the name below — the game's inventory-slot look. Falls back to a plain
+  // text row if ui-card.js didn't load (never a blank).
+  const box = (typeof UI_CARD !== 'undefined' && UI_CARD.itemBox) || null;
+  if (!box) {
+    const cells = its.map(i => `<span>${ITEM_KIND_ICON[i.kind] || '•'} <b>${esc(i.name)}</b> <span class="islot">${esc(i.kind)}</span></span>`).join(' · ');
+    return `<div class="kitem">🎒 ${cells}</div>`;
+  }
+  ensureUiDefs();   // inject the 69 KB frame ONCE as a <symbol>; slots reference it via <use>
+  const frame = `<svg viewBox="${esc(box.viewBox)}" aria-hidden="true"><use href="#ui-itembox"/></svg>`;
   const cells = its.map(i => {
     const icon = ITEM_KIND_ICON[i.kind] || '•';
-    return `<span>${icon} <b>${esc(i.name)}</b> <span class="islot">${esc(i.kind)}</span></span>`;
-  }).join(' · ');
-  return `<div class="kitem">🎒 ${cells}</div>`;
+    return `<div class="kislot" title="${esc(i.name)} — ${esc(i.kind)}">` +
+      `<div class="kibox">${frame}<span class="kiemoji">${icon}</span></div>` +
+      `<div class="kiname">${esc(i.name)}</div></div>`;
+  }).join('');
+  return `<div class="kitemgrid">${cells}</div>`;
 }
 
 // Size trait badge. The game prefixes tiny cats' display names ("Lil' …" / "Tiny …")
