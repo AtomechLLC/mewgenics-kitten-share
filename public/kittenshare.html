@@ -303,9 +303,8 @@
     box-shadow:1px 2px 0 rgba(43,38,34,.2)}
   .share-btn:hover{background:#4d6838}
   .share-btn.copied{background:#7a5aa8}
-  /* Grid cards open their hero view on click (the share button keeps its own action). */
-  .cards .kcard{cursor:pointer}
-  /* Explicit open-in-new-tab button, pinned to the card's top-right corner above the tape. */
+  /* Explicit open-in-new-tab button, pinned to the card's top-right corner above the tape —
+     the ONLY card opener (the card body itself is inert, so text selection works normally). */
   .opencard-btn{position:absolute;top:-6px;right:-4px;z-index:7;width:26px;height:26px;
     font-size:14px;font-weight:800;line-height:1;color:var(--ink);background:var(--paper3);
     border:2px solid var(--ink);border-radius:7px 5px 6px 5px/5px 6px 5px 7px;cursor:pointer;
@@ -338,9 +337,9 @@
   .morebar{grid-column:1/-1;text-align:center;padding:14px 0}
   .cta-btn.alt{background:var(--paper);color:var(--ink)}
   .cta-btn.alt:hover{background:var(--paper2)}
-  /* Keyboard support: a visible focus ring on every interactive element (cards included —
-     they're focusable buttons now), only for keyboard focus so mouse clicks stay clean. */
-  .kcard:focus-visible,.share-btn:focus-visible,.cta-btn:focus-visible,.rand-btn:focus-visible,
+  /* Keyboard support: a visible focus ring on every interactive element, only for keyboard
+     focus so mouse clicks stay clean. */
+  .opencard-btn:focus-visible,.share-btn:focus-visible,.cta-btn:focus-visible,.rand-btn:focus-visible,
   .class-btn:focus-visible,.sort-sel:focus-visible,.discord:focus-visible,
   .controls input:focus-visible{outline:3px solid #4d6838;outline-offset:2px}
   .single{max-width:420px;margin:0 auto}
@@ -1794,13 +1793,13 @@ function kittenCard(c, big){
   // data-key makes grid cards clickable (open the hero view); same validated-integer rule as
   // the share button — the raw key never reaches the DOM unvalidated. tabindex/role make the
   // card keyboard-activatable (Enter/Space handled by the #cards listener).
-  const clickable = !big && c.key != null;
-  // Explicit top-right open button (solo cards open in a NEW TAB, so the grid tab keeps the
-  // loaded save) — plus the whole card stays clickable for the same action.
-  const openBtn = clickable
+  // The explicit top-right ⧉ button is the ONLY card opener (solo cards open in a NEW TAB, so
+  // the grid tab keeps the loaded save). The card body itself is not clickable — text selection
+  // and stray clicks stay inert. The button is natively focusable, so keyboard access rides it.
+  const openBtn = (!big && c.key != null)
     ? `<button class="opencard-btn" data-key="${esc(String(c.key))}" title="open ${esc(c.name)}'s card in a new tab" aria-label="open ${esc(c.name)}'s card in a new tab">⧉</button>`
     : '';
-  return `<div class="kcard${big?' single':''}"${clickable ? ` data-key="${esc(String(c.key))}" tabindex="0" role="button" aria-label="open ${esc(c.name)}'s card"` : ''}>
+  return `<div class="kcard${big?' single':''}">
     ${openBtn}
     ${classDogtag(c)}
     <div class="kname"><span>${esc(c.name)}</span>${genderIcon(c.gender)}</div>
@@ -2033,18 +2032,7 @@ document.getElementById('cards').addEventListener('click', e => {
   const ob = e.target.closest('.opencard-btn');
   if (ob) { openCard(Number(ob.dataset.key)); return; }
   const b = e.target.closest('.share-btn');
-  if (b) { share(Number(b.dataset.key), b); return; }
-  if (e.target.closest('a')) return;   // ability-name links keep their own navigation
-  // Clicking anywhere else on a card opens its hero view — the EXACT card a share-link
-  // recipient would see (same encode->decode path), so what you preview IS what you share.
-  const card = e.target.closest('.kcard');
-  if (card && card.dataset.key != null) openCard(Number(card.dataset.key));
-});
-// Keyboard path for the focusable cards (Enter/Space = open, like any button).
-document.getElementById('cards').addEventListener('keydown', e => {
-  if (e.key !== 'Enter' && e.key !== ' ') return;
-  const card = e.target.closest('.kcard');
-  if (card && card.dataset.key != null) { e.preventDefault(); openCard(Number(card.dataset.key)); }
+  if (b) share(Number(b.dataset.key), b);
 });
 // Solo-card open: mint the cat's share blob and open it in a NEW TAB. The grid tab keeps the
 // loaded save untouched — the earlier in-page swap lost the roster to any reload on the hero
