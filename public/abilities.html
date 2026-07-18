@@ -64,6 +64,8 @@
   td{padding:7px 12px;border-bottom:1px solid #eee;vertical-align:top;line-height:1.45}
   tr:last-child td{border-bottom:none}
   tr:hover td{background:#f9f9f9}
+  /* Deep-linked row/card (#a=<id> from KittenShare) — a brief attention highlight. */
+  .deeplink-hl td,.ab-card.deeplink-hl{background:#fdf3d6 !important;outline:2px solid #c0913f}
   .desc{color:#555;font-size:12px;margin-top:2px}
   .class-badge{display:inline-block;font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;white-space:nowrap;background:color-mix(in srgb, var(--cls,#9ca3af) 16%, #fff);color:color-mix(in srgb, var(--cls,#374151) 72%, #000)}
   .type-badge{display:inline-block;font-size:10px;font-weight:600;padding:1px 7px;border-radius:10px;white-space:nowrap}
@@ -1411,6 +1413,7 @@ async function loadData() {
 
     buildUI();
     renderTable();
+    applyAbilityDeepLink();
   } catch(err) {
     // Fallback: try index to see other field names
     document.getElementById('status').innerHTML = `⚠️ Could not load live data: ${err.message}. <a href="https://mewgenics.wiki/api/v1/abilities.json" target="_blank">Open JSON</a> to inspect.`;
@@ -1625,6 +1628,24 @@ function downloadCSV() {
   a.href = URL.createObjectURL(blob);
   a.download = 'mewgenics_abilities_by_class.csv';
   a.click();
+}
+
+// #a=<game ability id> deep link (KittenShare cards link here): narrow the view to that
+// ability via the search box and highlight the first matching row/card. Falls back to
+// putting the raw token in the box when the id isn't in the loaded data (offline fallback
+// rows carry no ids) — the user still lands somewhere useful, never on a silent no-op.
+function applyAbilityDeepLink(){
+  const m = location.hash.match(/^#a=(.+)$/);
+  if (!m) return;
+  const tok = decodeURIComponent(m[1]);
+  const rec = Array.isArray(allData) && allData.find(r => r && r.id != null && String(r.id).toLowerCase() === tok.toLowerCase());
+  const srch = document.getElementById('srch');
+  srch.value = rec ? rec.name : tok;
+  renderTable();
+  requestAnimationFrame(() => {
+    const row = document.querySelector('#tblWrap tbody tr, #tblWrap .ab-card');
+    if (row) { row.classList.add('deeplink-hl'); row.scrollIntoView({ block: 'center' }); }
+  });
 }
 
 // Fallback static data (subset) if API fails
@@ -2613,6 +2634,7 @@ function loadFallback() {
 
   buildUI();
   renderTable();
+  applyAbilityDeepLink();
 }
 
 loadData();

@@ -93,6 +93,30 @@
   /* Friendly empty state when filters/search match nothing. */
   .noresult{grid-column:1/-1;font-family:var(--hand);text-align:center;color:var(--ink-soft);
     font-size:15px;font-weight:700;padding:2.2rem 0}
+  /* Search-syntax help button. */
+  .srchhelp{width:24px;height:24px;font-family:var(--hand);font-size:13px;font-weight:800;
+    color:var(--ink);background:var(--paper);border:2px solid var(--ink);border-radius:50%;
+    cursor:pointer;padding:0}
+  .srchhelp:hover{background:var(--paper2)}
+  /* ---- mobile / touch ---- */
+  /* The collar tags deliberately overhang the cards; never let that overhang become a
+     horizontal page scroll. */
+  body{overflow-x:hidden}
+  @media (max-width:600px){
+    body{padding:0.8rem}
+    .controls input[type="search"]{width:150px}
+    .kcard .kdogtag.real{width:110px;height:106px;top:-34px;left:-30px}
+    .single .kdogtag.real{width:140px;height:134px;top:-44px;left:-38px}
+    .single{max-width:100%}
+    .stickybar{padding:4px 0 2px}
+  }
+  @media (pointer:coarse){
+    /* Thumb-sized tap targets for the per-card buttons. */
+    .opencard-btn{width:36px;height:36px;font-size:18px;top:-8px;right:-6px}
+    .cmp-btn{width:36px;height:36px;font-size:17px;right:36px;top:-8px}
+    .srchhelp{width:32px;height:32px}
+    .totop{width:48px;height:48px}
+  }
   /* ⚖ compare toggle next to the ⧉ open button; active = inked-in. */
   .cmp-btn{position:absolute;top:-6px;right:26px;z-index:7;width:26px;height:26px;
     font-size:13px;font-weight:800;line-height:1;color:var(--ink);background:var(--paper3);
@@ -393,6 +417,9 @@
   .class-btn:focus-visible,.sort-sel:focus-visible,.discord:focus-visible,
   .controls input:focus-visible{outline:3px solid #4d6838;outline-offset:2px}
   .single{max-width:420px;margin:0 auto}
+  /* Team view (#t=): 2-3 hero cards side by side, wrapping on narrow screens. */
+  .teamrow{display:flex;flex-wrap:wrap;gap:16px;justify-content:center;align-items:flex-start}
+  .teamrow > .kcard.single{margin:0;flex:0 1 380px}
   /* The real paper texture (border-image on .kcard) now provides the torn edge on the hero card
      too, so the old #torn faux-paper ::before backing is retired. A slightly thicker torn border
      reads better at hero size. */
@@ -455,6 +482,7 @@
         aria-label="Search kittens by name, class, ability, item or mutation">
       <button class="srchclear" id="srchClear" title="Clear search (Esc)" aria-label="Clear search" onclick="clearSearch()">✕</button>
     </span>
+    <button class="srchhelp" title="Search syntax help" aria-label="Search syntax help" onclick="showSearchHelp()">?</button>
     <label class="tgl" id="houseTgl" style="display:none" title="Show only the cats currently living in your house. The save's cat table holds every cat that ever existed — ancestors, the dead, the long gone — so this filters to the roster in house_state.">
       <input type="checkbox" id="houseOnly" onchange="renderCards()"> in the house only
     </label>
@@ -462,7 +490,7 @@
       <input type="checkbox" id="hideDead" onchange="renderCards()"> hide dead
     </label>
     <label class="tgl" title="Shorter cards: hides abilities, items, mutations and injuries so far more kittens fit on screen. The full details are one ⧉ away.">
-      <input type="checkbox" id="compactCards" onchange="document.getElementById('cards').classList.toggle('compact', this.checked)"> compact
+      <input type="checkbox" id="compactCards" onchange="document.getElementById('cards').classList.toggle('compact', this.checked); saveViewSettings()"> compact
     </label>
     <label class="tgl" title="Show the game's [effective | base | modifier] stat triplet. The modifier is reconstructed from the sources we decode (mutations + equipped items) — it is PARTIAL and will disagree with in-game wherever level or trait bonuses apply.">
       <input type="checkbox" id="detailedStats" onchange="renderCards()"> detailed stats
@@ -507,6 +535,7 @@
   <!-- Floating compare tray: appears once 2+ cats are ticked with the ⚖ card button. -->
   <div class="comparebar" id="compareBar" style="display:none">
     <button class="cta-btn" onclick="showCompare()">⚖ compare (<span id="cmpN">0</span>)</button>
+    <button class="cta-btn alt" onclick="shareTeam(this)" title="Copy ONE link that shows all the picked kittens side by side">🔗 share team</button>
     <button class="cta-btn alt" onclick="clearCompare()">clear</button>
   </div>
   <!-- Shared overlay host for the compare table and roster analytics. -->
@@ -1252,11 +1281,14 @@ async function attachIdle(root, cat, parts){
   if (!rig) return;
   const svgEl = root.querySelector('svg');
   if (svgEl) {
-    // Track the stop handle so hideShareView can halt the loop when the hero card is dismissed
-    // (and so opening a second card first stops the previous card's loop).
-    if (window.__heroStop) window.__heroStop();
-    window.__heroStop = driveIdle(svgEl, rig, parts, behaviours);
+    // Track every hero-idle stop handle (a TEAM view runs one loop per card); dismissal paths
+    // call stopHeroIdles() so hidden cards never keep animating.
+    (window.__heroStops || (window.__heroStops = [])).push(driveIdle(svgEl, rig, parts, behaviours));
   }
+}
+function stopHeroIdles(){
+  for (const s of window.__heroStops || []) s();
+  window.__heroStops = [];
 }
 
 // The game's part art is grayscale, recolored by a paletted shader
@@ -1382,6 +1414,7 @@ async function openSave(buf){
   const dz = document.getElementById('drop'); if (dz) dz.style.display = 'none';
   const wip = document.querySelector('.wip'); if (wip) wip.style.display = 'none';
   hideDemo();   // the sample kitten yields to the real roster
+  loadViewSettings();   // restore the workbench (sort/filters/compact) from the last visit
   renderCards();
 }
 
@@ -1456,7 +1489,12 @@ function buildClassFilter(){
     const art = col ? `<svg viewBox="${esc(col.viewBox)}" aria-hidden="true">${col.defs}${col.body}</svg>` : '';
     return `<button class="class-btn" data-cls="${esc(cls)}" title="${counts[cls]} ${esc(cls)}">${art}<span>${esc(cls)}</span></button>`;
   };
-  bar.innerHTML = `<button class="class-btn all active" data-cls="">all</button>` + classes.map(chip).join('');
+  bar.innerHTML = `<button class="class-btn all" data-cls="">all</button>` + classes.map(chip).join('');
+  // Respect a restored class filter (loadViewSettings) — but only if that class exists in
+  // THIS roster; otherwise fall back to "all".
+  if (__classFilter && !classes.includes(__classFilter)) __classFilter = null;
+  bar.querySelectorAll('.class-btn').forEach(x =>
+    x.classList.toggle('active', (x.dataset.cls || null) === __classFilter));
   bar.style.display = 'flex';
   bar.addEventListener('click', e => {
     const b = e.target.closest('.class-btn');
@@ -1467,6 +1505,28 @@ function buildClassFilter(){
       x.classList.toggle('active', (x.dataset.cls || null) === __classFilter));
     renderCards();
   });
+}
+// View settings persist across visits (localStorage) — the workbench comes back as you left
+// it after re-dropping the save. Search text deliberately does NOT persist (a stale query
+// showing 3 cats after a reload reads as data loss). try/catch: private mode has no storage.
+const VIEW_KEYS = ['houseOnly','hideDead','hideInjured','mutantsOnly','clonesOnly','detailedStats','debugInfo','compactCards'];
+function saveViewSettings(){
+  try {
+    const v = { sort: (document.getElementById('sortSel')||{}).value, classFilter: __classFilter };
+    for (const id of VIEW_KEYS) { const cb = document.getElementById(id); if (cb) v[id] = cb.checked; }
+    localStorage.setItem('ks-view', JSON.stringify(v));
+  } catch (e) {}
+}
+function loadViewSettings(){
+  try {
+    const v = JSON.parse(localStorage.getItem('ks-view') || 'null');
+    if (!v) return;
+    for (const id of VIEW_KEYS) { const cb = document.getElementById(id); if (cb && typeof v[id] === 'boolean') cb.checked = v[id]; }
+    const sel = document.getElementById('sortSel');
+    if (sel && v.sort && [...sel.options].some(o => o.value === v.sort)) sel.value = v.sort;
+    if (typeof v.classFilter === 'string') __classFilter = v.classFilter;
+    document.getElementById('cards').classList.toggle('compact', !!v.compactCards);
+  } catch (e) {}
 }
 // Paged render: filters/search/sort reset to the first page; the "show more" button under the
 // grid extends it 120 at a time (rendering all 1298 SVG puppets at once is a multi-second paint).
@@ -1502,6 +1562,7 @@ function renderCards(keepLimit){
   // side by side.
   if (clonesOnly) cats = cats.slice().sort((a, b) => String(geneSig(a)).localeCompare(String(geneSig(b))) || String(a.name).localeCompare(String(b.name)));
   document.getElementById('cnt').textContent = `Showing ${Math.min(cats.length, __showLimit)} of ${cats.length}`;
+  saveViewSettings();   // before the empty-state early-return, so filters persist even then
   const el = document.getElementById('cards');
   if (!cats.length && allCats.length) {
     // Friendly dead-end: say WHY it's empty and offer the one-click way out.
@@ -1520,6 +1581,18 @@ function renderCards(keepLimit){
 function clearSearch(){
   const s = document.getElementById('srch');
   s.value = ''; renderCards(); s.focus();
+}
+// The query language is powerful but invisible — this is its one-page manual.
+function showSearchHelp(){
+  openOverlay(`<h2>search syntax</h2>
+    <table>
+      <tr><th>snipe</th><td>text match — names, classes, abilities, items, mutations, mutation effects, injuries</td></tr>
+      <tr><th>cha>=8</th><td>stat filter on the decoded base stats: <b>str dex con int spd cha lck hp</b> with <b>&gt; &gt;= = &lt;= &lt;</b></td></tr>
+      <tr><th>medic cha=7</th><td>tokens combine with AND — Medics whose base CHA is exactly 7</td></tr>
+      <tr><th>+2 cha</th><td>finds cats with a mutation whose decoded effect is "+2 CHA"</td></tr>
+      <tr><th>broken leg</th><td>finds cats carrying that injury</td></tr>
+    </table>
+    <div class="dim" style="margin-top:8px">shortcuts: <b>/</b> focuses search · <b>Esc</b> clears it · stat filters use base values (level bonuses aren't decoded)</div>`);
 }
 function resetFilters(){
   const s = document.getElementById('srch'); if (s) s.value = '';
@@ -1659,13 +1732,11 @@ function abilityChip(id){
     ? `<span class="kabil-cat" role="img" aria-label="${esc(cat)}" title="${esc(cat)} — best-guess from game files">${CATEGORY_SVG[cat]}</span>` : '';
   const catClass = cat ? ' cat-' + cat : '';
   const title = label === id ? label : label + ' (' + id + ')';
-  // Link the name to the wiki's per-ability page. It keys those by DISPLAY name under the
-  // MediaWiki convention — spaces become underscores (/wiki/Lobbed_Shot, /wiki/Blizzard) —
-  // so build the title that way rather than percent-encoding the space. Only link when we
-  // resolved a real name; linking a raw internal id would just 404.
-  // rel=noopener/noreferrer because this opens a third-party tab.
+  // Deep-link the name into OUR abilities page (#a=<id> scrolls + highlights the row there) —
+  // keeps the loop inside the toolkit instead of bouncing to a third-party wiki. New tab so
+  // the loaded save survives. Only link when we resolved a real name.
   const name = (info && info.n && label !== id)
-    ? `<a class="kabil-n" href="https://mewgenics.wiki.gg/wiki/${esc(encodeURIComponent(label.replace(/ /g, '_')))}" target="_blank" rel="noopener noreferrer" title="open ${esc(label)} on the Mewgenics wiki">${esc(label)}</a>`
+    ? `<a class="kabil-n" href="abilities.html#a=${esc(encodeURIComponent(id))}" target="_blank" rel="noopener" title="open ${esc(label)} in the abilities reference">${esc(label)}</a>`
     : `<b>${esc(label)}</b>`;
   return `<div class="kabil-i${catClass}" title="${esc(title)}">${icon}<span class="kabil-t">${name}${desc}</span>${mana}${catSym}</div>`;
 }
@@ -1859,17 +1930,22 @@ function collarTag(c){
 // the count stacks it, so the shown penalty is per-injury × count (Disfigured ×2 = CHA−2).
 // Honest: nothing renders for a cat with no decoded injury, and penalties come from the table,
 // never from the wire.
-function injuryBlock(c){
+// Same grid/single split as mutations: the browse grid lists injury NAMES only (compact —
+// heavily wounded cats were eating three lines of grid card), while the solo card keeps the
+// full per-injury penalty breakdown. The penalties still surface on the grid via the red
+// stat-badge marks, so no information disappears — it just moves to where it fits.
+function injuryBlock(c, big){
   const inj = Array.isArray(c.injuries) ? c.injuries : [];
   if (!inj.length) return '';
   const items = inj.map(i => {
     const n = i.count > 1 ? ` <span class="icnt">×${i.count}</span>` : '';
+    if (!big) return `<b>${esc(i.name)}</b>${n}`;
     const pen = Object.entries(i.penalty || {})
       .map(([k, v]) => `${k.toUpperCase()}${(v * (i.count || 1)) >= 0 ? '+' : '−'}${Math.abs(v * (i.count || 1))}`)
       .join(' ');
     return `<b>${esc(i.name)}</b>${n}${pen ? ` <span class="ipen">${esc(pen)}</span>` : ''}`;
   }).join(' · ');
-  return `<div class="kinj" title="Permanent injuries from adventures — each is a permanent stat penalty.">🩹 ${items}</div>`;
+  return `<div class="kinj" title="Permanent injuries from adventures — each is a permanent stat penalty${big ? '' : ' (open the card for the breakdown)'}.">🩹 ${items}</div>`;
 }
 
 // Equipped items (cat.items = [{key,kind,frame,name}] decoded in save-decode.js). Shows a
@@ -1972,7 +2048,7 @@ function kittenCard(c, big){
     ${sizeBadge(c)}
     ${unverified}
     ${mutBlock(c, big)}
-    ${injuryBlock(c)}
+    ${injuryBlock(c, big)}
     ${itemBlock(c)}
     ${stats}
     <div class="kportwrap">${mutCounter(c)}<div class="portrait">${portrait}</div></div>
@@ -1998,7 +2074,7 @@ function shareCTA(){
   const dl = `<button class="cta-btn alt" onclick="downloadPortraitPng()" title="Save this kitten's portrait as a 1024px PNG">⬇ portrait PNG</button>`;
   // Copy-link only when the page IS a share link (the demo card on the landing page has no
   // #k= URL of its own — copying the bare page URL would be a broken promise).
-  const cp = location.hash.startsWith('#k=')
+  const cp = /^#[kt]=/.test(location.hash)
     ? ` <button class="cta-btn alt" onclick="copyShareUrl(this)" title="Copy this kitten's share link">🔗 copy link</button>` : '';
   // Solo views always live in their own save-less tab now (openCard uses window.open), so the
   // CTA is simply the recipient conversion link; a local user just closes the tab.
@@ -2020,6 +2096,7 @@ function copyShareUrl(btn){
   } catch (e) { fail(); }
 }
 function showShareView(html){
+  stopHeroIdles();                      // never stack loops from a previous view (e.g. the demo)
   document.getElementById('openView').style.display = 'none';
   const sv = document.getElementById('shareView');
   sv.style.display = 'block';
@@ -2031,10 +2108,28 @@ function showShareView(html){
   kittenCard.pendingIdle = null;
   if (p) attachIdle(sv, p.cat, p.parts);
 }
+// TEAM view: 2-3 hero cards side by side from a #t= link. Same pipeline per cat as the single
+// view; each card gets its own idle loop (attachIdle per card root).
+function showTeamView(cats){
+  stopHeroIdles();
+  document.getElementById('openView').style.display = 'none';
+  const sv = document.getElementById('shareView');
+  sv.style.display = 'block';
+  const pendings = [];
+  const html = cats.map(c => {
+    const h = kittenCard(c, true);
+    pendings.push(kittenCard.pendingIdle);
+    kittenCard.pendingIdle = null;
+    return h;
+  }).join('');
+  sv.innerHTML = `<div class="teamrow">${html}</div>` + shareCTA();
+  const cardEls = sv.querySelectorAll('.teamrow > .kcard');
+  pendings.forEach((p, i) => { if (p && cardEls[i]) attachIdle(cardEls[i], p.cat, p.parts); });
+}
 // Restore the browse grid after an in-page card open (browser Back / the back button above).
 // Stops the hero idle loop so a hidden card doesn't keep animating forever.
 function hideShareView(){
-  if (window.__heroStop) { window.__heroStop(); window.__heroStop = null; }
+  stopHeroIdles();
   document.getElementById('shareView').style.display = 'none';
   document.getElementById('openView').style.display = '';
 }
@@ -2045,13 +2140,13 @@ function hideShareView(){
 const DEMO_BLOB = 'N4IgbiBcCMA0IDsogPIBsCmBrAzgQwQBMAnEeAY2QAkBXBAFw1PgHNkBbPTMkPKAbRAAhPDgCW5AEoEWGQgH1aDJjwDKABzGEmAURZt4AGTEIMqgBYB7ejyEY8xACrE86ngDFMeC9Z6T75OYgALrwOAIAbLBRUQDMsAAssACsKbAAtNChIFgCAJxwsQAMAByw0BFl0MkATOW19XXVdclwNTVJNW3QNdlukHlFFP1RIAAe-clDIABWAvx1scHZYgLC9k4u6uHwAAomAO6WxOxqmtrEemzZAJ5QXREAvkA';
 async function renderDemo(){
   const host = document.getElementById('demoView');
-  if (!host || location.hash.startsWith('#k=')) return;
+  if (!host || /^#[kt]=/.test(location.hash)) return;
   const cat = SaveDecode.decodeShare(DEMO_BLOB);
   if (!cat || cat.__unsupportedVersion) return;
   try { await loadNeededParts(cat.genes.slots, cat.genes.pattern); } catch (e) { return; }
   await loadAbilityInfo(); await loadAbilityArt(cat.abilities);
   // A save may have loaded (or a link opened) while the art fetched — the sample yields.
-  if (allCats.length || location.hash.startsWith('#k=')) return;
+  if (allCats.length || /^#[kt]=/.test(location.hash)) return;
   host.innerHTML = `<div class="demolabel">↑ drop your save to see YOUR kittens — here's a sample</div>` + kittenCard(cat, true);
   host.style.display = 'block';
   const p = kittenCard.pendingIdle;
@@ -2061,7 +2156,7 @@ async function renderDemo(){
 function hideDemo(){
   const host = document.getElementById('demoView');
   if (!host || host.style.display === 'none') return;
-  if (window.__heroStop) { window.__heroStop(); window.__heroStop = null; }
+  stopHeroIdles();
   host.style.display = 'none';
   host.innerHTML = '';
 }
@@ -2165,6 +2260,33 @@ async function downloadPortraitPng(){
   } catch (e) { /* tainted/serialize failure -> no download, never a corrupt file */ }
 }
 async function tryShareView(){
+  // TEAM link first: #t= is 2-3 standard v1 blobs joined by '.' ('.' is outside lz-string's
+  // URI-safe alphabet, so it can never appear inside a blob). Each blob goes through the SAME
+  // decodeShare hygiene as a single link; undecodable members are dropped, and a link where
+  // nothing decodes falls back to the friendly error card.
+  const tm = location.hash.match(/#t=([A-Za-z0-9+\-$.]+)/);
+  if (tm) {
+    const cats = tm[1].split('.').slice(0, 3)
+      .map(b => SaveDecode.decodeShare(b))
+      .filter(c => c && !c.__unsupportedVersion);
+    if (!cats.length) {
+      showShareView(fallbackCard("This team link couldn't be read",
+        'The link looks broken or incomplete. Ask for a fresh link, or open your own save below.'));
+      return true;
+    }
+    try {
+      for (const c of cats) await loadNeededParts(c.genes.slots, c.genes.pattern);
+    } catch (e) {
+      showShareView(fallbackCard("Couldn't load this team's art",
+        'The shared kitten data is fine, but the puppet assets failed to load. Check your connection and refresh.'));
+      return true;
+    }
+    await loadAbilityInfo();
+    await loadAbilityArt(cats.flatMap(c => c.abilities));
+    document.title = `${cats.map(c => c.name).join(' & ')} — KittenShare`;
+    showTeamView(cats);
+    return true;
+  }
   // lz-string's compressToEncodedURIComponent emits exactly [A-Za-z0-9+-$] (its
   // URI-safe alphabet). The class MUST include '+' and '$' or a blob would be
   // truncated mid-string and fail to decode.
@@ -2239,6 +2361,31 @@ function clearCompare(){
   __compareSet.clear();
   document.getElementById('compareBar').style.display = 'none';
   document.querySelectorAll('#cards .cmp-btn.on').forEach(b => b.classList.remove('on'));
+}
+// ONE link for the whole picked team: standard v1 blobs joined by '.' under #t=. Reuses the
+// single-cat codec untouched; same never-silent copy feedback as everywhere else.
+function shareTeam(btn){
+  const cats = [...__compareSet].map(k => allCats.find(c => c.key === k)).filter(Boolean);
+  if (cats.length < 2) return;
+  const blobs = cats.map(c => SaveDecode.encodeShare(c, { currentDay: CURRENT_DAY })).filter(Boolean);
+  if (blobs.length !== cats.length) { flashTeamBtn(btn, '⚠ encode failed'); return; }
+  const url = location.origin + location.pathname + '#t=' + blobs.join('.');
+  if (url.length > 1900) { flashTeamBtn(btn, '⚠ link too long'); return; }
+  const ok = () => flashTeamBtn(btn, '✅ copied!');
+  const fail = () => {
+    if (legacyCopy(url)) { ok(); return; }
+    flashTeamBtn(btn, '⚠ copy failed');
+    window.prompt('Copy this team link:', url);
+  };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(ok, fail);
+    else if (legacyCopy(url)) ok(); else fail();
+  } catch (e) { fail(); }
+}
+function flashTeamBtn(btn, text){
+  btn.textContent = text;
+  clearTimeout(btn._flash);
+  btn._flash = setTimeout(() => { btn.textContent = '🔗 share team'; }, 1800);
 }
 function openOverlay(html){
   document.getElementById('overlayBody').innerHTML = html;
@@ -2409,7 +2556,7 @@ addEventListener('scroll', () => {
 // external (a pasted link, or manually clearing it). Defensive: if the hash clears while a
 // save is loaded, restore the grid in place; anything else reloads so tryShareView runs fresh.
 window.addEventListener('hashchange', () => {
-  if (!location.hash.startsWith('#k=') && allCats.length) { hideShareView(); return; }
+  if (!/^#[kt]=/.test(location.hash) && allCats.length) { hideShareView(); return; }
   location.reload();
 });
 // Boot: a #k= link renders the shared card; otherwise the cold landing shows the sample kitten.

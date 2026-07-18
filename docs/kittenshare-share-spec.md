@@ -78,6 +78,15 @@ the server never sees the fragment.
 
 ---
 
+### Team links — `#t=<blob>.<blob>[.<blob>]` (additive, 2026-07-18)
+
+A TEAM link is a page-level composition of 2–3 **standard v1 blobs** joined by `.` — a
+character outside lz-string's URI-safe alphabet, so it can never appear inside a blob. The
+codec is untouched: each member encodes/decodes exactly like a single `#k=` link, with the
+same per-blob hygiene. A consumer drops undecodable members and renders the rest side by
+side; a link where nothing decodes gets the friendly error card. Producer guard: the whole
+URL stays under the same ~1900-char budget (3 real cats ≈ 950 chars — comfortable).
+
 ## 3. OG / social-preview strategy
 
 Because the fragment is unreadable server-side, a crawler fetching a share URL sees only
