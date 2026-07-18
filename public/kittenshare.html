@@ -299,6 +299,20 @@
     border:2px solid var(--ink);border-radius:9px 7px 8px 7px/7px 8px 7px 9px;padding:3px 10px;cursor:pointer;
     box-shadow:1px 1px 0 rgba(43,38,34,.16)}
   .rand-btn:hover{background:var(--paper2)}
+  /* Sort dropdown — paper-styled to sit with the rest of the controls. */
+  .sort-sel{font-family:var(--hand);font-size:12px;font-weight:700;color:var(--ink);background:var(--paper);
+    border:2px solid var(--ink);border-radius:8px 6px 7px 6px/6px 7px 6px 8px;padding:2px 6px;cursor:pointer}
+  /* Class filter bar: paper chips wearing the real collar art. */
+  .classbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:2px 0 12px}
+  .class-btn{display:inline-flex;align-items:center;gap:4px;font-family:var(--hand);font-size:11.5px;
+    font-weight:800;color:var(--ink);background:var(--paper);border:2px solid var(--ink);
+    border-radius:9px 7px 8px 7px/7px 8px 7px 9px;padding:2px 9px;cursor:pointer;
+    box-shadow:1px 1px 0 rgba(43,38,34,.14)}
+  .class-btn svg{width:20px;height:19px;display:block}
+  .class-btn:hover{background:var(--paper2)}
+  .class-btn.active{background:var(--ink);color:var(--paper3)}
+  /* "show more" bar spans the whole grid row. */
+  .morebar{grid-column:1/-1;text-align:center;padding:14px 0}
   .single{max-width:420px;margin:0 auto}
   /* The real paper texture (border-image on .kcard) now provides the torn edge on the hero card
      too, so the old #torn faux-paper ::before backing is retired. A slightly thicker torn border
@@ -359,9 +373,18 @@
     <label class="tgl" title="Show render/debug notes on each card, e.g. which parts of the portrait are real vs approximated.">
       <input type="checkbox" id="debugInfo" onchange="renderCards()"> debug info
     </label>
+    <select id="sortSel" class="sort-sel" title="Sort the roster" onchange="renderCards()">
+      <option value="save">save order</option>
+      <option value="name">name A–Z</option>
+      <option value="age">oldest first</option>
+      <option value="class">by class</option>
+      <option value="stats">highest stats</option>
+    </select>
     <button class="rand-btn" id="randBtn" title="Open a random kitten from your roster" onclick="openRandomCard()">🎲 random kitten</button>
     <span id="cnt" style="font-size:12px;color:#888"></span>
   </div>
+  <!-- Class filter: one button per class present in the roster, wearing its real collar art. -->
+  <div class="classbar" id="classBtns" style="display:none"></div>
   <div class="cards" id="cards"></div>
 </div>
 
@@ -1231,19 +1254,77 @@ async function openSave(buf){
   renderCards();
 }
 
-function renderCards(){
+// Search haystack: name + class + ability ids/names + item names + mutation names, so
+// "who has Snipe?" or "who wears the Crown?" works. Ability display names come from
+// ABILITY_INFO when the lazy monolith has loaded; the stable ids always match.
+function searchHay(c){
+  const parts = [c.name, c.cls || ''];
+  for (const a of c.abilities || []) {
+    parts.push(a);
+    const info = (typeof ABILITY_INFO !== 'undefined') && ABILITY_INFO[a];
+    if (info && info.n) parts.push(info.n);
+  }
+  for (const i of c.items || []) parts.push(i.name || '', i.key || '');
+  for (const m of (c.genes && c.genes.mutations) || []) parts.push(m.name || '');
+  return parts.join('\n').toLowerCase();
+}
+function sortCats(cats, mode){
+  const by = f => cats.slice().sort((a, b) => f(a) - f(b) || String(a.name).localeCompare(String(b.name)));
+  switch (mode) {
+    case 'name': return cats.slice().sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    case 'age':  return by(c => -(catAge(c.birthDay, CURRENT_DAY, c.deathDay) ?? -1));
+    case 'class': return cats.slice().sort((a, b) => String(a.cls).localeCompare(String(b.cls)) || String(a.name).localeCompare(String(b.name)));
+    case 'stats': return by(c => { const s = c.stats; return s ? -(s.str+s.dex+s.con+s.int+s.spd+s.cha+s.lck) : 1; });
+    default: return cats;             // save order
+  }
+}
+// Class filter row — one paper chip per class PRESENT in the roster, wearing its real collar
+// art, ordered by head-count. Click to filter, click again (or "all") to clear.
+let __classFilter = null;
+function buildClassFilter(){
+  const bar = document.getElementById('classBtns');
+  if (!bar || bar.dataset.built || !allCats.length) return;
+  bar.dataset.built = '1';
+  const counts = {};
+  for (const c of allCats) if (c.cls) counts[c.cls] = (counts[c.cls] || 0) + 1;
+  const classes = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+  const chip = cls => {
+    const col = (typeof UI_CARD !== 'undefined' && UI_CARD.classCollars) ? UI_CARD.classCollars[cls] : null;
+    const art = col ? `<svg viewBox="${esc(col.viewBox)}" aria-hidden="true">${col.defs}${col.body}</svg>` : '';
+    return `<button class="class-btn" data-cls="${esc(cls)}" title="${counts[cls]} ${esc(cls)}">${art}<span>${esc(cls)}</span></button>`;
+  };
+  bar.innerHTML = `<button class="class-btn all active" data-cls="">all</button>` + classes.map(chip).join('');
+  bar.style.display = 'flex';
+  bar.addEventListener('click', e => {
+    const b = e.target.closest('.class-btn');
+    if (!b) return;
+    const cls = b.dataset.cls || null;
+    __classFilter = (cls === __classFilter) ? null : cls;    // toggle off on second click
+    bar.querySelectorAll('.class-btn').forEach(x =>
+      x.classList.toggle('active', (x.dataset.cls || null) === __classFilter));
+    renderCards();
+  });
+}
+// Paged render: filters/search/sort reset to the first page; the "show more" button under the
+// grid extends it 120 at a time (rendering all 1298 SVG puppets at once is a multi-second paint).
+let __showLimit = 120;
+function showMoreCards(){ __showLimit += 120; renderCards(true); }
+function renderCards(keepLimit){
+  if (!keepLimit) __showLimit = 120;
+  buildClassFilter();
   const q = (document.getElementById('srch').value||'').toLowerCase();
   const hb = document.getElementById('houseOnly');
   const houseOnly = !!(hb && hb.checked);
-  const cats = allCats.filter(c =>
+  let cats = allCats.filter(c =>
     (!houseOnly || !!c.room) &&
-    (!q || c.name.toLowerCase().includes(q) || (c.cls||'').toLowerCase().includes(q)));
-  document.getElementById('cnt').textContent = `Showing ${cats.length} of ${allCats.length}`;
+    (!__classFilter || c.cls === __classFilter) &&
+    (!q || searchHay(c).includes(q)));
+  cats = sortCats(cats, (document.getElementById('sortSel')||{}).value);
+  document.getElementById('cnt').textContent = `Showing ${Math.min(cats.length, __showLimit)} of ${cats.length}`;
   const el = document.getElementById('cards');
-  const LIMIT = 120;
-  const shown = cats.slice(0, LIMIT);
+  const shown = cats.slice(0, __showLimit);
   el.innerHTML = shown.map(c => kittenCard(c, false)).join('') +
-    (cats.length > LIMIT ? `<div class="no-results">…and ${cats.length - LIMIT} more (use search)</div>` : '');
+    (cats.length > __showLimit ? `<div class="morebar"><button class="cta-btn" onclick="showMoreCards()">show ${Math.min(120, cats.length - __showLimit)} more (${cats.length - __showLimit} left)</button></div>` : '');
   // SPIKE: animate on-screen cards only. __gridCats is DOM-order (matches the cards just written).
   __gridCats = shown;
   if (typeof setupGridAnim === 'function') setupGridAnim();
