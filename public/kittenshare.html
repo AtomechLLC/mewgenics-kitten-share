@@ -79,15 +79,17 @@
   .kcard .portrait{width:150px;height:150px;pointer-events:none}
   /* Name row mirrors the game's banner: class emblem, name, then the ♂/♀ glyph. Both glyphs
      are currentColor art, so they inherit the name's colour. */
-  /* Name = a torn-paper ribbon banner. Text/emblems ride ON TOP (crisp); a ::before backing is
-     roughened by the #torn filter for the hand-torn edge, and the whole thing tilts slightly. */
-  .kcard .kname{position:relative;font-weight:800;font-size:15px;margin-top:8px;display:inline-flex;
-    align-items:center;justify-content:center;gap:6px;color:var(--ink);text-align:center;
-    padding:3px 18px;transform:rotate(-1.2deg);isolation:isolate}
-  .kcard .kname::before{content:"";position:absolute;inset:-1px -2px;z-index:-1;
-    background:var(--paper3);border:2.5px solid var(--ink);
-    filter:url(#torn);box-shadow:1px 2px 0 rgba(43,38,34,.16)}
-  .single .kname{font-size:19px;padding:4px 22px}
+  /* Name = the REAL in-game banner ribbon (tex-banner.png, bitmap 1167). border-image keeps the
+     rolled ends fixed (side slices) while the writing band stretches to fit the name; text rides
+     in the content box on the band. */
+  .kcard .kname{font-weight:800;font-size:15px;margin-top:6px;margin-bottom:-6px;min-width:120px;
+    display:inline-flex;align-items:center;justify-content:center;gap:6px;color:var(--ink);text-align:center;line-height:1;
+    border:solid transparent;border-width:15px 42px 27px;
+    border-image:url('kittenshare/tex-banner.png') 24 120 92 fill / 15px 42px 27px / 0 stretch;
+    padding:0 2px;transform:rotate(-1deg);filter:drop-shadow(1px 1px 1px rgba(43,38,34,.18))}
+  .kcard .kname::before{display:none}
+  .single .kname{font-size:20px;min-width:200px;border-width:19px 54px 34px;
+    border-image-width:19px 54px 34px}
   .kcard .kemblem{width:15px;height:15px;flex:0 0 15px;display:block;opacity:.85}
   .kcard .ksex{width:11px;height:11px;flex:0 0 11px;display:block;opacity:.7}
   .single .kname{font-size:17px;gap:7px}
@@ -96,19 +98,23 @@
   .kcard .kmeta{font-size:11.5px;color:var(--ink-soft);font-weight:600;margin-top:3px;text-align:center}
   /* Class shown as a pet-collar ID tag: a rounded nametag with a little ring/hole, the class
      emblem, and the class name — sits under the name banner like the game's class collar. */
+  /* Collar + age tags ride on the REAL in-game paper label (tex-note.png, bitmap 2966), via
+     border-image so the hand-drawn edge stays crisp and the middle stretches to the text. */
   .kcard .kcollar{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:800;
-    color:var(--ink);background:var(--paper);border:2px solid var(--ink);
-    border-radius:10px 8px 9px 8px/8px 9px 8px 10px;padding:2px 10px 2px 7px;margin-top:6px;
-    box-shadow:1px 1px 0 rgba(43,38,34,.14);transform:rotate(-1deg)}
+    color:var(--ink);margin-top:7px;transform:rotate(-1deg);
+    border:solid transparent;border-width:10px 17px;
+    border-image:url('kittenshare/tex-note.png') 30 64 fill / 10px 17px / 0 stretch;
+    padding:0 2px;filter:drop-shadow(1px 1px 1px rgba(43,38,34,.14))}
   .kcard .kcollar::before{content:"";width:7px;height:7px;flex:0 0 7px;border-radius:50%;
     border:2px solid var(--ink);background:var(--paper3)}   /* the collar ring/hole */
   .kcard .kcollar .kemblem{width:14px;height:14px;flex-basis:14px;opacity:.9}
   .single .kcollar{font-size:13px;padding:3px 13px 3px 9px}
   .single .kcollar .kemblem{width:17px;height:17px;flex-basis:17px}
-  /* Age as a small taped tag, like the game's "Age" label. */
-  .kcard .kage{display:inline-block;font-size:10px;font-weight:700;color:var(--ink);background:var(--paper);
-    border:1.5px solid var(--ink);border-radius:6px 4px 5px 4px/4px 5px 4px 6px;padding:0 6px;margin-left:4px;
-    transform:rotate(-1deg);vertical-align:1px}
+  /* Age on the real paper label (tex-note.png). */
+  .kcard .kage{display:inline-block;font-size:10px;font-weight:700;color:var(--ink);margin-left:5px;
+    border:solid transparent;border-width:8px 13px;
+    border-image:url('kittenshare/tex-note.png') 28 60 fill / 8px 13px / 0 stretch;
+    padding:0 1px;transform:rotate(-1deg);vertical-align:-3px}
   /* Taped paper tags: age / room / status / size / level — muted, slightly askew like the game. */
   .kcard .ktag,.kcard .kroom,.kcard .kdead,.kcard .ksize{display:inline-block;font-size:10.5px;font-weight:700;
     background:var(--paper);color:var(--ink);border:2px solid var(--ink);
