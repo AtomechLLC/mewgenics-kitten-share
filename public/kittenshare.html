@@ -269,6 +269,14 @@
     box-shadow:1px 2px 0 rgba(43,38,34,.2)}
   .share-btn:hover{background:#4d6838}
   .share-btn.copied{background:#7a5aa8}
+  /* Grid cards open their hero view on click (the share button keeps its own action). */
+  .cards .kcard{cursor:pointer}
+  /* CTA under the hero card — a paper button matching the share button, not a bare text link. */
+  .ctarow{text-align:center;margin-top:14px}
+  .cta-btn{display:inline-block;font-family:var(--hand);font-size:14px;font-weight:800;color:var(--paper3);
+    background:#5f7d46;border:2px solid var(--ink);border-radius:12px 9px 11px 9px/9px 11px 9px 12px;
+    padding:7px 20px;cursor:pointer;text-decoration:none;box-shadow:1px 2px 0 rgba(43,38,34,.2)}
+  .cta-btn:hover{background:#4d6838}
   .single{max-width:420px;margin:0 auto}
   /* The real paper texture (border-image on .kcard) now provides the torn edge on the hero card
      too, so the old #torn faux-paper ::before backing is retired. A slightly thicker torn border
@@ -1067,7 +1075,12 @@ async function attachIdle(root, cat, parts){
   ]);
   if (!rig) return;
   const svgEl = root.querySelector('svg');
-  if (svgEl) driveIdle(svgEl, rig, parts, behaviours);
+  if (svgEl) {
+    // Track the stop handle so hideShareView can halt the loop when the hero card is dismissed
+    // (and so opening a second card first stops the previous card's loop).
+    if (window.__heroStop) window.__heroStop();
+    window.__heroStop = driveIdle(svgEl, rig, parts, behaviours);
+  }
 }
 
 // The game's part art is grayscale, recolored by a paletted shader
@@ -1655,7 +1668,9 @@ function kittenCard(c, big){
   const metaClass = esc(c.cls || '—');
   const metaGender = (c.gender && !genderIcon(c.gender)) ? esc(c.gender) : '';
   const metaLead = [metaClass, metaGender].filter(Boolean).join(' · ');
-  return `<div class="kcard${big?' single':''}">
+  // data-key makes grid cards clickable (open the hero view); same validated-integer rule as
+  // the share button — the raw key never reaches the DOM unvalidated.
+  return `<div class="kcard${big?' single':''}"${!big && c.key != null ? ` data-key="${esc(String(c.key))}"` : ''}>
     ${classDogtag(c)}
     <div class="kname"><span>${esc(c.name)}</span>${genderIcon(c.gender)}</div>
     <div class="kmeta">${metaLead}${ageText(c)}</div>
@@ -1682,8 +1697,14 @@ function kittenCard(c, big){
 // not the old unverified neutral kitten.
 
 // SHR-05 CTA appended to EVERY shared card (happy path, bad link, unsupported version).
+// The control under the hero card adapts to who is looking: a LOCAL user (their save is open)
+// gets a Back button that restores the browse grid in place; a RECIPIENT (no save) gets the
+// conversion CTA. Both are paper buttons, not bare text links.
 function shareCTA(){
-  return `<p style="text-align:center;margin-top:12px;font-size:12px"><a href="${location.pathname}">Open your own save →</a></p>`;
+  if (allCats.length) {
+    return `<p class="ctarow"><button class="cta-btn" onclick="history.back()">← back to your kittens</button></p>`;
+  }
+  return `<p class="ctarow"><a class="cta-btn" href="${location.pathname}">Open your own save →</a></p>`;
 }
 function showShareView(html){
   document.getElementById('openView').style.display = 'none';
@@ -1696,6 +1717,13 @@ function showShareView(html){
   const p = kittenCard.pendingIdle;
   kittenCard.pendingIdle = null;
   if (p) attachIdle(sv, p.cat, p.parts);
+}
+// Restore the browse grid after an in-page card open (browser Back / the back button above).
+// Stops the hero idle loop so a hidden card doesn't keep animating forever.
+function hideShareView(){
+  if (window.__heroStop) { window.__heroStop(); window.__heroStop = null; }
+  document.getElementById('shareView').style.display = 'none';
+  document.getElementById('openView').style.display = '';
 }
 // A friendly, honest fallback card (never a crash or a blank page — SHR-04).
 function fallbackCard(title, msg){
@@ -1808,8 +1836,26 @@ async function tryShareView(){
 // vector the moment it reached innerHTML). data-key holds a validated safe integer.
 document.getElementById('cards').addEventListener('click', e => {
   const b = e.target.closest('.share-btn');
-  if (b) share(Number(b.dataset.key), b);
+  if (b) { share(Number(b.dataset.key), b); return; }
+  if (e.target.closest('a')) return;   // ability-name links keep their own navigation
+  // Clicking anywhere else on a card opens its hero view — the EXACT card a share-link
+  // recipient would see (same encode->decode path), so what you preview IS what you share.
+  const card = e.target.closest('.kcard');
+  if (card && card.dataset.key != null) openCard(Number(card.dataset.key));
 });
+// In-page card open: mint the cat's share blob, put it in the hash (a real history entry, so
+// the browser Back button returns to the grid), and render WITHOUT reloading — a reload would
+// drop the loaded save. __localNav tells the hashchange listener we already rendered.
+let __localNav = false;
+function openCard(key){
+  const c = allCats.find(x => x.key === key);
+  if (!c) return;
+  const blob = SaveDecode.encodeShare(c, { currentDay: CURRENT_DAY });
+  if (!blob) return;
+  __localNav = true;
+  location.hash = 'k=' + blob;
+  tryShareView();
+}
 const drop = document.getElementById('drop'), fileIn = document.getElementById('file');
 drop.onclick = () => fileIn.click();
 // Neither entry point may fire-and-forget: a rejected arrayBuffer()/openSave()
@@ -1839,7 +1885,14 @@ drop.ondrop = e => { e.preventDefault(); drop.classList.remove('drag'); const f 
       .catch(() => { btn.textContent = '🛠 __demo.sav not found'; });
   };
 })();
-window.addEventListener('hashchange', () => location.reload());
+// Hash navigation: an in-page card open has already rendered (skip); Back from a locally
+// opened card clears the hash — restore the grid in place (a reload would drop the save);
+// any OTHER hash change (a pasted link) still reloads so tryShareView runs fresh.
+window.addEventListener('hashchange', () => {
+  if (__localNav) { __localNav = false; return; }
+  if (!location.hash.startsWith('#k=') && allCats.length) { hideShareView(); return; }
+  location.reload();
+});
 tryShareView();
 </script>
 </body>
