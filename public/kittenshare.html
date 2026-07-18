@@ -82,6 +82,12 @@
   .kcard .kdogtag .kemblem{width:20px;height:20px;flex-basis:20px;opacity:1}
   .single .kdogtag{width:46px;height:46px;top:-8px;left:-6px}
   .single .kdogtag .kemblem{width:27px;height:27px;flex-basis:27px}
+  /* REAL ornate ClassCollar art: the tag is its own shape, so drop the CSS circle/border. */
+  .kcard .kdogtag.real{background:none;border:none;border-radius:0;box-shadow:none;
+    width:54px;height:52px;top:-10px;left:-8px;transform:rotate(-7deg);
+    filter:drop-shadow(1px 2px 1px rgba(43,38,34,.28))}
+  .kcard .kdogtag.real svg{width:100%;height:100%;display:block}
+  .single .kdogtag.real{width:74px;height:71px;top:-14px;left:-12px}
   /* Mutation COUNT badge by the portrait (decoded mutations only). */
   .kcard .kportwrap{position:relative;display:flex;justify-content:center;width:100%}
   .kcard .kmutcount{position:absolute;top:0;left:4px;z-index:3;font-size:10px;font-weight:800;
@@ -1481,13 +1487,19 @@ function mutBlock(c, big){
   return `<div class="kmut">🧬 ${items}</div>`;
 }
 
-// The class DOGTAG the game hangs in the card's top-left corner. Uses the real FontIcon_<Class>
-// emblem (ui-icons.js). '' when the class is unknown.
+// The class COLLAR TAG the game hangs in the card's top-left corner — the REAL large ornate
+// art from ui.swf's ClassCollar sprite (UI_CARD.classCollars, keyed by the SWF FrameLabel,
+// which matches our decoder's class names 1:1). Falls back to the flat FontIcon_<Class> emblem
+// if ui-card.js didn't load. '' when the class is unknown.
 function classDogtag(c){
   if (!c || !c.cls) return '';
+  const col = (typeof UI_CARD !== 'undefined' && UI_CARD.classCollars) ? UI_CARD.classCollars[c.cls] : null;
+  if (col) {
+    return `<div class="kdogtag real" title="${esc(c.cls)} collar">` +
+      `<svg viewBox="${esc(col.viewBox)}" role="img" aria-label="${esc(c.cls)} collar">${col.defs}${col.body}</svg></div>`;
+  }
   const ic = classIcon(c.cls);
-  if (!ic) return '';
-  return `<div class="kdogtag" title="${esc(c.cls)}">${ic}</div>`;
+  return ic ? `<div class="kdogtag" title="${esc(c.cls)}">${ic}</div>` : '';
 }
 // Mutation COUNT badge, like the game's counter by the portrait. Counts only decoded mutations.
 function mutCounter(c){
@@ -1608,16 +1620,15 @@ function kittenCard(c, big){
   if (big) kittenCard.pendingIdle = { cat: c, parts: renderPortrait.last };
   // Section order mirrors the in-game card top-to-bottom: NAME ribbon, then meta/tags, then the
   // stat grid, then the PORTRAIT in the middle, then abilities. (Previously portrait-first.)
-  // Class now lives in the collar tag below the name; kmeta drops it (no double emblem, no
-  // duplicate class text). If the class is unknown there's no collar, so kmeta shows it instead.
-  const collar = collarTag(c);
-  const metaClass = collar ? '' : esc(c.cls || '—');
+  // The class is carried by the real ornate COLLAR TAG in the top-left corner (classDogtag),
+  // exactly like the game — so the old paper "collar pill" under the name is gone and kmeta
+  // carries the class NAME again (the art alone doesn't spell it out).
+  const metaClass = esc(c.cls || '—');
   const metaGender = (c.gender && !genderIcon(c.gender)) ? esc(c.gender) : '';
   const metaLead = [metaClass, metaGender].filter(Boolean).join(' · ');
   return `<div class="kcard${big?' single':''}">
     ${classDogtag(c)}
     <div class="kname"><span>${esc(c.name)}</span>${genderIcon(c.gender)}</div>
-    ${collar}
     <div class="kmeta">${metaLead}${ageText(c)}</div>
     ${roomBadge(c)}${statusBadge(c)}
     ${sizeBadge(c)}
