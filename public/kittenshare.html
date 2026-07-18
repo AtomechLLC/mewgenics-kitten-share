@@ -160,6 +160,7 @@
   .kcard .kislot{width:54px;text-align:center}
   .kcard .kislot .kibox{position:relative;width:44px;height:44px;margin:0 auto}
   .kcard .kislot .kibox svg{width:44px;height:44px;display:block}
+  .kcard .kislot .kiimg{position:absolute;inset:0;margin:auto;width:62%;height:62%;object-fit:contain;image-rendering:auto}
   .kcard .kislot .kiemoji{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:19px;line-height:1}
   .kcard .kislot .kiname{font-size:9px;font-weight:700;color:var(--ink);line-height:1.15;margin-top:1px;
     overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
@@ -341,6 +342,7 @@
 <script src="kittenshare/ui-icons.js"></script>
 <script src="kittenshare/ability-categories.js"></script>
 <script src="kittenshare/item-ids.js"></script>
+<script src="kittenshare/item-icons.js"></script>   <!-- item key -> real vendored item icon -->
 <script src="kittenshare/ui-card.js"></script>   <!-- real HouseCatStatus chrome from ui.swf -->
 
 <!-- items.js (worn-item art, ~9 MB) is lazy-loaded by loadMonolith(), never eager. -->
@@ -1570,9 +1572,14 @@ function itemBlock(c){
   ensureUiDefs();   // inject the 69 KB frame ONCE as a <symbol>; slots reference it via <use>
   const frame = `<svg viewBox="${esc(box.viewBox)}" aria-hidden="true"><use href="#ui-itembox"/></svg>`;
   const cells = its.map(i => {
-    const icon = ITEM_KIND_ICON[i.kind] || '•';
+    // Real item icon (item-icons.js maps the blob's item key -> the vendored icon). The per-slot
+    // emoji is only a FALLBACK for the ~4% of items with no wiki record — never a wrong icon.
+    const src = (typeof ITEM_ICONS !== 'undefined' && i.key) ? ITEM_ICONS[i.key] : null;
+    const icon = src
+      ? `<img class="kiimg" src="${esc(src)}" alt="" loading="lazy">`
+      : `<span class="kiemoji">${ITEM_KIND_ICON[i.kind] || '•'}</span>`;
     return `<div class="kislot" title="${esc(i.name)} — ${esc(i.kind)}">` +
-      `<div class="kibox">${frame}<span class="kiemoji">${icon}</span></div>` +
+      `<div class="kibox">${frame}${icon}</div>` +
       `<div class="kiname">${esc(i.name)}</div></div>`;
   }).join('');
   return `<div class="kitemgrid">${cells}</div>`;
