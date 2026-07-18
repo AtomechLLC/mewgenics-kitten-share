@@ -1580,10 +1580,16 @@ function kittenCard(c, big){
   const unknownBuild = c.buildOk === false && c.build != null;
   const unverified = verified ? '' :
     `<div class="unverified">⚠ appearance unverified${unknownBuild ? ' · unrecognized save build ' + esc(String(c.build)) : ''}</div>`;
+  // The internals toggle only exists in the local browse view; a shared card always renders
+  // the plain base stats (a share link must not carry a debug view).
+  const cb = document.getElementById('internals');
+  const debug = !big && !!(cb && cb.checked);
   // Pose (catanis.swf idle rig), coat COLOR, and fur PATTERN (CatTexture overlay) are
   // now all real. The one remaining approximation is that stripes render straight rather
-  // than UV-wrapped to the body contour (SVG can't per-pixel sample the texture).
-  const approx = verified ?
+  // than UV-wrapped to the body contour (SVG can't per-pixel sample the texture). That
+  // caveat is DEBUG detail, so it hides behind the internals checkbox rather than sitting
+  // on every card.
+  const approx = (verified && debug) ?
     `<div class="approx">real pose + coat color + fur pattern · stripes render straight (no UV contour wrap)</div>` : '';
   const abils = (c.abilities && c.abilities.length)
     ? `<div class="kabil">${c.abilities.slice(0,8).map(abilityChip).join('')}</div>` : '';
@@ -1592,11 +1598,9 @@ function kittenCard(c, big){
   // "⚠ stats unverified" label appears ONLY when c.stats is genuinely null (e.g. an
   // unrecognized build or a blob that failed to decompress) — never a fabricated
   // value, never a silently blank card. MP/level stay null (unlocated) and simply
-  // don't render. Mirrors the appearance-unverified label.
-  // The internals toggle only exists in the local browse view; a shared card always renders
-  // the plain base stats (a share link must not carry a debug view).
-  const cb = document.getElementById('internals');
-  const stats = statsBlock(c.stats, c, !big && !!(cb && cb.checked)) ||
+  // don't render. Mirrors the appearance-unverified label. `debug` (the internals checkbox,
+  // browse view only) is resolved above and shared with the render-caveat footnote.
+  const stats = statsBlock(c.stats, c, debug) ||
     `<div class="unverified">⚠ stats unverified</div>`;
   const portrait = renderPortrait(c);
   // Capture the puppet's ingredients for the idle animator RIGHT HERE — renderPortrait.last is
