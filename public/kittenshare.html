@@ -314,7 +314,10 @@
       <input type="checkbox" id="houseOnly" onchange="renderCards()"> in the house only
     </label>
     <label class="tgl" title="Show the game's [effective | base | modifier] stat triplet. The modifier is reconstructed from the sources we decode (mutations + equipped items) — it is PARTIAL and will disagree with in-game wherever level or trait bonuses apply.">
-      <input type="checkbox" id="internals" onchange="renderCards()"> show internal values
+      <input type="checkbox" id="detailedStats" onchange="renderCards()"> detailed stats
+    </label>
+    <label class="tgl" title="Show render/debug notes on each card, e.g. which parts of the portrait are real vs approximated.">
+      <input type="checkbox" id="debugInfo" onchange="renderCards()"> debug info
     </label>
     <span id="cnt" style="font-size:12px;color:#888"></span>
   </div>
@@ -1592,10 +1595,13 @@ function kittenCard(c, big){
   const unknownBuild = c.buildOk === false && c.build != null;
   const unverified = verified ? '' :
     `<div class="unverified">⚠ appearance unverified${unknownBuild ? ' · unrecognized save build ' + esc(String(c.build)) : ''}</div>`;
-  // The internals toggle only exists in the local browse view; a shared card always renders
-  // the plain base stats (a share link must not carry a debug view).
-  const cb = document.getElementById('internals');
-  const debug = !big && !!(cb && cb.checked);
+  // Two INDEPENDENT browse-view toggles: "detailed stats" (the effective|base|modifier triplet)
+  // and "debug info" (render caveats). Both only exist in the local browse view — a shared card
+  // always renders the plain base stats and no debug text (a share link carries no debug view).
+  const detailCb = document.getElementById('detailedStats');
+  const debugCb = document.getElementById('debugInfo');
+  const detail = !big && !!(detailCb && detailCb.checked);
+  const debug = !big && !!(debugCb && debugCb.checked);
   // Pose (catanis.swf idle rig), coat COLOR, and fur PATTERN (CatTexture overlay) are
   // now all real. The one remaining approximation is that stripes render straight rather
   // than UV-wrapped to the body contour (SVG can't per-pixel sample the texture). That
@@ -1610,9 +1616,9 @@ function kittenCard(c, big){
   // "⚠ stats unverified" label appears ONLY when c.stats is genuinely null (e.g. an
   // unrecognized build or a blob that failed to decompress) — never a fabricated
   // value, never a silently blank card. MP/level stay null (unlocated) and simply
-  // don't render. Mirrors the appearance-unverified label. `debug` (the internals checkbox,
-  // browse view only) is resolved above and shared with the render-caveat footnote.
-  const stats = statsBlock(c.stats, c, debug) ||
+  // don't render. Mirrors the appearance-unverified label. The triplet is driven by the
+  // "detailed stats" toggle (`detail`), independent of the "debug info" toggle.
+  const stats = statsBlock(c.stats, c, detail) ||
     `<div class="unverified">⚠ stats unverified</div>`;
   const portrait = renderPortrait(c);
   // Capture the puppet's ingredients for the idle animator RIGHT HERE — renderPortrait.last is
