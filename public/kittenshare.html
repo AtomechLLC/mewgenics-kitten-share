@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>KittenShare — Mewgenics</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E🐾%3C/text%3E%3C/svg%3E">
 <meta name="description" content="Open a Mewgenics save, browse your kittens, and copy a share link to show off a cat.">
 <!-- Social preview (share-spec §3): the #k= cat payload is a URL fragment, which is
      UNREADABLE server-side, so a crawler can never render the specific cat. We ship ONE
@@ -66,9 +67,32 @@
   /* Scoped to the search box: a bare `.controls input` also hit the internals checkbox,
      stretching it to 220px and shoving its label far to the right. */
   .controls input[type="search"]{font-family:var(--hand);font-weight:700;color:var(--ink);
-    background:var(--paper3);padding:5px 10px;border:2px solid var(--ink);
+    background:var(--paper3);padding:5px 26px 5px 10px;border:2px solid var(--ink);
     border-radius:9px 7px 8px 7px/7px 8px 7px 9px;font-size:13px;width:220px}
   .controls input[type="search"]::placeholder{color:var(--ink-soft);opacity:.7}
+  /* Clear-search ✕ inside the box; hidden until there's something to clear. */
+  .srchwrap{position:relative;display:inline-flex;align-items:center}
+  .srchclear{position:absolute;right:6px;display:none;border:none;background:none;cursor:pointer;
+    font-size:12px;font-weight:800;color:var(--ink-soft);padding:2px}
+  .srchwrap.hasq .srchclear{display:block}
+  /* Toolbar stays pinned while the grid scrolls; opaque page-coloured backing so cards slide
+     underneath cleanly. */
+  .stickybar{position:sticky;top:0;z-index:20;background:#f7f3ec;padding:6px 0 2px;
+    box-shadow:0 5px 8px -7px rgba(43,38,34,.4)}
+  /* Compact grid: hide the long sections so far more kittens fit per screen. */
+  .cards.compact .kabil,.cards.compact .kitemgrid,.cards.compact .kitem,.cards.compact .kmut,
+  .cards.compact .kinj,.cards.compact .approx{display:none}
+  .cards.compact .portrait{width:120px;height:120px}
+  /* Floating back-to-top paper button; shown only after real scrolling. */
+  .totop{position:fixed;right:18px;bottom:18px;z-index:30;display:none;width:40px;height:40px;
+    font-family:var(--hand);font-size:19px;font-weight:800;color:var(--ink);background:var(--paper3);
+    border:2px solid var(--ink);border-radius:11px 9px 10px 9px/9px 10px 9px 11px;cursor:pointer;
+    box-shadow:1px 2px 0 rgba(43,38,34,.2)}
+  .totop.show{display:block}
+  .totop:hover{background:var(--paper2)}
+  /* Friendly empty state when filters/search match nothing. */
+  .noresult{grid-column:1/-1;font-family:var(--hand);text-align:center;color:var(--ink-soft);
+    font-size:15px;font-weight:700;padding:2.2rem 0}
   .controls .tgl{color:var(--ink-soft)}
   /* Accuracy notes as a collapsed paper tag — accurate but debug-flavoured, so opt-in. */
   .wip{font-family:var(--hand);font-size:12.5px;color:var(--ink);background:var(--paper);
@@ -397,10 +421,22 @@
   <!-- Cold-landing sample: a real shared kitten rendered from a baked share blob, so a visitor
        sees the payoff before finding their save file. Hidden the moment a save loads. -->
   <div id="demoView" style="display:none"></div>
+  <!-- Sticky toolbar: search/sort/filters stay reachable however deep the grid scrolls. -->
+  <div class="stickybar" id="stickybar">
   <div class="controls" id="controls" style="display:none">
-    <input type="search" id="srch" placeholder="Search kittens…" oninput="renderCards()">
+    <span class="srchwrap">
+      <input type="search" id="srch" placeholder="Search kittens…  ( / )" oninput="renderCards()"
+        aria-label="Search kittens by name, class, ability, item or mutation">
+      <button class="srchclear" id="srchClear" title="Clear search (Esc)" aria-label="Clear search" onclick="clearSearch()">✕</button>
+    </span>
     <label class="tgl" id="houseTgl" style="display:none" title="Show only the cats currently living in your house. The save's cat table holds every cat that ever existed — ancestors, the dead, the long gone — so this filters to the roster in house_state.">
       <input type="checkbox" id="houseOnly" onchange="renderCards()"> in the house only
+    </label>
+    <label class="tgl" title="Hide cats with a death-day stamp in the save. Only DECODED deaths are hidden — other gone-from-the-house states (donated, retired…) aren't locatable yet, so those cats stay visible.">
+      <input type="checkbox" id="hideDead" onchange="renderCards()"> hide dead
+    </label>
+    <label class="tgl" title="Shorter cards: hides abilities, items, mutations and injuries so far more kittens fit on screen. The full details are one ⧉ away.">
+      <input type="checkbox" id="compactCards" onchange="document.getElementById('cards').classList.toggle('compact', this.checked)"> compact
     </label>
     <label class="tgl" title="Show the game's [effective | base | modifier] stat triplet. The modifier is reconstructed from the sources we decode (mutations + equipped items) — it is PARTIAL and will disagree with in-game wherever level or trait bonuses apply.">
       <input type="checkbox" id="detailedStats" onchange="renderCards()"> detailed stats
@@ -420,7 +456,9 @@
   </div>
   <!-- Class filter: one button per class present in the roster, wearing its real collar art. -->
   <div class="classbar" id="classBtns" style="display:none"></div>
+  </div>
   <div class="cards" id="cards"></div>
+  <button class="totop" id="toTop" title="Back to top" aria-label="Back to top" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</button>
 </div>
 
 <script src="vendor/sql-wasm.js"></script>
@@ -1348,22 +1386,45 @@ function showMoreCards(){ __showLimit += 120; renderCards(true); }
 function renderCards(keepLimit){
   if (!keepLimit) __showLimit = 120;
   buildClassFilter();
-  const q = (document.getElementById('srch').value||'').toLowerCase();
+  const srch = document.getElementById('srch');
+  const q = (srch.value||'').toLowerCase();
+  srch.parentElement.classList.toggle('hasq', q.length > 0);   // shows the ✕ clear button
   const hb = document.getElementById('houseOnly');
   const houseOnly = !!(hb && hb.checked);
+  const dd = document.getElementById('hideDead');
+  const hideDead = !!(dd && dd.checked);
   let cats = allCats.filter(c =>
     (!houseOnly || !!c.room) &&
+    (!hideDead || c.status !== 'dead') &&
     (!__classFilter || c.cls === __classFilter) &&
     (!q || searchHay(c).includes(q)));
   cats = sortCats(cats, (document.getElementById('sortSel')||{}).value);
   document.getElementById('cnt').textContent = `Showing ${Math.min(cats.length, __showLimit)} of ${cats.length}`;
   const el = document.getElementById('cards');
+  if (!cats.length && allCats.length) {
+    // Friendly dead-end: say WHY it's empty and offer the one-click way out.
+    el.innerHTML = `<div class="noresult">😿 no kittens match${q ? ` “${esc(q)}”` : ''}${__classFilter ? ` in ${esc(__classFilter)}` : ''}<br>
+      <button class="cta-btn alt" style="margin-top:10px" onclick="resetFilters()">clear search &amp; filters</button></div>`;
+    __gridCats = [];
+    return;
+  }
   const shown = cats.slice(0, __showLimit);
   el.innerHTML = shown.map(c => kittenCard(c, false)).join('') +
     (cats.length > __showLimit ? `<div class="morebar"><button class="cta-btn" onclick="showMoreCards()">show ${Math.min(120, cats.length - __showLimit)} more (${cats.length - __showLimit} left)</button></div>` : '');
   // SPIKE: animate on-screen cards only. __gridCats is DOM-order (matches the cards just written).
   __gridCats = shown;
   if (typeof setupGridAnim === 'function') setupGridAnim();
+}
+function clearSearch(){
+  const s = document.getElementById('srch');
+  s.value = ''; renderCards(); s.focus();
+}
+function resetFilters(){
+  const s = document.getElementById('srch'); if (s) s.value = '';
+  for (const id of ['houseOnly', 'hideDead']) { const cb = document.getElementById(id); if (cb) cb.checked = false; }
+  __classFilter = null;
+  document.querySelectorAll('#classBtns .class-btn').forEach(x => x.classList.toggle('active', !x.dataset.cls));
+  renderCards();
 }
 
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -1832,9 +1893,28 @@ function kittenCard(c, big){
 // conversion CTA. Both are paper buttons, not bare text links.
 function shareCTA(){
   const dl = `<button class="cta-btn alt" onclick="downloadPortraitPng()" title="Save this kitten's portrait as a 1024px PNG">⬇ portrait PNG</button>`;
+  // Copy-link only when the page IS a share link (the demo card on the landing page has no
+  // #k= URL of its own — copying the bare page URL would be a broken promise).
+  const cp = location.hash.startsWith('#k=')
+    ? ` <button class="cta-btn alt" onclick="copyShareUrl(this)" title="Copy this kitten's share link">🔗 copy link</button>` : '';
   // Solo views always live in their own save-less tab now (openCard uses window.open), so the
   // CTA is simply the recipient conversion link; a local user just closes the tab.
-  return `<p class="ctarow"><a class="cta-btn" href="${location.pathname}">Open your own save →</a> ${dl}</p>`;
+  return `<p class="ctarow"><a class="cta-btn" href="${location.pathname}">Open your own save →</a>${cp} ${dl}</p>`;
+}
+// Copy the solo tab's own #k= URL — recipients (and the local user) shouldn't have to fish it
+// out of the address bar. Same never-silent feedback contract as the grid share button.
+function copyShareUrl(btn){
+  const url = location.href;
+  const ok = () => { btn.textContent = '✅ copied!'; setTimeout(() => { btn.textContent = '🔗 copy link'; }, 1600); };
+  const fail = () => {
+    if (legacyCopy(url)) { ok(); return; }
+    btn.textContent = '⚠ copy failed'; setTimeout(() => { btn.textContent = '🔗 copy link'; }, 2200);
+    window.prompt('Copy this share link:', url);
+  };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(ok, fail);
+    else if (legacyCopy(url)) ok(); else fail();
+  } catch (e) { fail(); }
 }
 function showShareView(html){
   document.getElementById('openView').style.display = 'none';
@@ -2020,6 +2100,9 @@ async function tryShareView(){
   // loader resolves each ability id to its frame via ABILITY_INFO.
   await loadAbilityInfo();
   await loadAbilityArt(cat.abilities);
+  // Name the tab after the cat — with every solo card in its own tab, a row of identical
+  // "KittenShare" tabs is unnavigable.
+  if (cat.name) document.title = `${cat.name} — KittenShare`;
   showShareView(kittenCard(cat, true));
   return true;
 }
@@ -2065,6 +2148,29 @@ fileIn.onchange = () => { if (fileIn.files[0]) openFile(fileIn.files[0]); };
 drop.ondragover = e => { e.preventDefault(); drop.classList.add('drag'); };
 drop.ondragleave = () => drop.classList.remove('drag');
 drop.ondrop = e => { e.preventDefault(); drop.classList.remove('drag'); const f = e.dataTransfer.files[0]; if (f) openFile(f); };
+// The WHOLE PAGE accepts the save file, not just the small zone — missing the box and having
+// the browser navigate to the raw .sav is the classic drag-and-drop failure. Works after a
+// save is loaded too (drops a new save in place).
+document.addEventListener('dragover', e => {
+  if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) e.preventDefault();
+});
+document.addEventListener('drop', e => {
+  if (!e.dataTransfer || !e.dataTransfer.files.length) return;
+  e.preventDefault();
+  openFile(e.dataTransfer.files[0]);
+});
+// Keyboard: `/` focuses search from anywhere (except while typing); Esc in the box clears it.
+document.addEventListener('keydown', e => {
+  const inField = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName);
+  const srch = document.getElementById('srch');
+  if (e.key === '/' && !inField && srch && srch.offsetParent) { e.preventDefault(); srch.focus(); }
+  else if (e.key === 'Escape' && document.activeElement === srch && srch.value) { clearSearch(); }
+});
+// Back-to-top appears only after real scrolling (piggybacks the existing passive listener zone).
+addEventListener('scroll', () => {
+  const b = document.getElementById('toTop');
+  if (b) b.classList.toggle('show', scrollY > 600);
+}, { passive: true });
 // DEV ONLY: a one-click loader for the local __demo.sav, so testing doesn't need the file picker
 // each reload. Gated to localhost/file:// — it never renders on the deployed site, and the save
 // isn't published there regardless.
