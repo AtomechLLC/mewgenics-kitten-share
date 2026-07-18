@@ -74,6 +74,14 @@
     box-shadow:0 1px 2px rgba(0,0,0,.14)}
   .kcard::before{left:12px;transform:rotate(-4deg)}
   .kcard::after{right:12px;transform:rotate(3.5deg)}
+  /* Organic variation: stagger the tape strips across the grid so 120 cards don't read as
+     wallpaper — the game jitters its tape too. Pure CSS, cycles every 4 cards. */
+  .cards .kcard:nth-child(4n+1)::before{left:22px;transform:rotate(2.5deg);width:42px}
+  .cards .kcard:nth-child(4n+1)::after{right:8px;transform:rotate(-3deg)}
+  .cards .kcard:nth-child(4n+2)::before{left:9px;transform:rotate(-6deg)}
+  .cards .kcard:nth-child(4n+2)::after{right:26px;transform:rotate(5deg);width:40px}
+  .cards .kcard:nth-child(4n+3)::before{left:16px;transform:rotate(5deg);width:52px}
+  .cards .kcard:nth-child(4n+3)::after{right:14px;transform:rotate(-4.5deg);width:44px}
   /* Class DOGTAG hanging in the card's top-left corner, like the game. */
   .kcard .kdogtag{position:absolute;top:-4px;left:-2px;z-index:5;width:34px;height:34px;
     display:flex;align-items:center;justify-content:center;background:var(--paper3);
@@ -277,6 +285,11 @@
     background:#5f7d46;border:2px solid var(--ink);border-radius:12px 9px 11px 9px/9px 11px 9px 12px;
     padding:7px 20px;cursor:pointer;text-decoration:none;box-shadow:1px 2px 0 rgba(43,38,34,.2)}
   .cta-btn:hover{background:#4d6838}
+  /* 🎲 random-kitten button in the controls row — small paper button. */
+  .rand-btn{font-family:var(--hand);font-size:12px;font-weight:800;color:var(--ink);background:var(--paper);
+    border:2px solid var(--ink);border-radius:9px 7px 8px 7px/7px 8px 7px 9px;padding:3px 10px;cursor:pointer;
+    box-shadow:1px 1px 0 rgba(43,38,34,.16)}
+  .rand-btn:hover{background:var(--paper2)}
   .single{max-width:420px;margin:0 auto}
   /* The real paper texture (border-image on .kcard) now provides the torn edge on the hero card
      too, so the old #torn faux-paper ::before backing is retired. A slightly thicker torn border
@@ -337,6 +350,7 @@
     <label class="tgl" title="Show render/debug notes on each card, e.g. which parts of the portrait are real vs approximated.">
       <input type="checkbox" id="debugInfo" onchange="renderCards()"> debug info
     </label>
+    <button class="rand-btn" id="randBtn" title="Open a random kitten from your roster" onclick="openRandomCard()">🎲 random kitten</button>
     <span id="cnt" style="font-size:12px;color:#888"></span>
   </div>
   <div class="cards" id="cards"></div>
@@ -1855,6 +1869,13 @@ function openCard(key){
   __localNav = true;
   location.hash = 'k=' + blob;
   tryShareView();
+}
+// 🎲 open a random shareable kitten (any cat with a valid key) — cheap discovery in a
+// four-digit roster.
+function openRandomCard(){
+  const pool = allCats.filter(c => c.key != null);
+  if (!pool.length) return;
+  openCard(pool[(Math.random() * pool.length) | 0].key);
 }
 const drop = document.getElementById('drop'), fileIn = document.getElementById('file');
 drop.onclick = () => fileIn.click();
