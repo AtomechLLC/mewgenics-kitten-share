@@ -74,6 +74,19 @@
     box-shadow:0 1px 2px rgba(0,0,0,.14)}
   .kcard::before{left:12px;transform:rotate(-4deg)}
   .kcard::after{right:12px;transform:rotate(3.5deg)}
+  /* Class DOGTAG hanging in the card's top-left corner, like the game. */
+  .kcard .kdogtag{position:absolute;top:-4px;left:-2px;z-index:5;width:34px;height:34px;
+    display:flex;align-items:center;justify-content:center;background:var(--paper3);
+    border:2.5px solid var(--ink);border-radius:50%;box-shadow:1px 2px 0 rgba(43,38,34,.2);
+    transform:rotate(-8deg)}
+  .kcard .kdogtag .kemblem{width:20px;height:20px;flex-basis:20px;opacity:1}
+  .single .kdogtag{width:46px;height:46px;top:-8px;left:-6px}
+  .single .kdogtag .kemblem{width:27px;height:27px;flex-basis:27px}
+  /* Mutation COUNT badge by the portrait (decoded mutations only). */
+  .kcard .kportwrap{position:relative;display:flex;justify-content:center;width:100%}
+  .kcard .kmutcount{position:absolute;top:0;left:4px;z-index:3;font-size:10px;font-weight:800;
+    color:var(--ink);background:var(--paper3);border:2px solid var(--ink);border-radius:9px;
+    padding:0 6px;line-height:1.5;box-shadow:1px 1px 0 rgba(43,38,34,.16);transform:rotate(-3deg)}
   /* Display-only puppet: never let the (animated) portrait intercept a click meant for the
      card's buttons. Belt-and-suspenders — the svg already clips its own hit area. */
   .kcard .portrait{width:150px;height:150px;pointer-events:none}
@@ -82,14 +95,15 @@
   /* Name = the REAL in-game banner ribbon (tex-banner.png, bitmap 1167). border-image keeps the
      rolled ends fixed (side slices) while the writing band stretches to fit the name; text rides
      in the content box on the band. */
-  .kcard .kname{font-weight:800;font-size:15px;margin-top:6px;margin-bottom:-6px;min-width:120px;
+  .kcard .kname{font-weight:800;font-size:15px;margin-top:6px;margin-bottom:-6px;
+    min-width:88%;width:88%;box-sizing:border-box;
     display:inline-flex;align-items:center;justify-content:center;gap:6px;color:var(--ink);text-align:center;line-height:1;
     border:solid transparent;border-width:15px 42px 27px;
     border-image:url('kittenshare/tex-banner.png') 24 120 92 fill / 15px 42px 27px / 0 stretch;
     padding:0 2px;transform:rotate(-1deg);filter:drop-shadow(1px 1px 1px rgba(43,38,34,.18))}
   .kcard .kname::before{display:none}
-  .single .kname{font-size:20px;min-width:200px;border-width:19px 54px 34px;
-    border-image-width:19px 54px 34px}
+  .single .kname{font-size:22px;min-width:92%;width:92%;border-width:22px 60px 38px;
+    border-image-width:22px 60px 38px}
   .kcard .kemblem{width:15px;height:15px;flex:0 0 15px;display:block;opacity:.85}
   .kcard .ksex{width:11px;height:11px;flex:0 0 11px;display:block;opacity:.7}
   .single .kname{font-size:17px;gap:7px}
@@ -194,10 +208,20 @@
   .kcard .kstats{display:flex;gap:10px;margin-top:8px;width:100%;justify-content:center;
     background:var(--paper);border:2px solid var(--ink);border-radius:11px 9px 10px 9px/9px 10px 9px 11px;padding:7px 9px}
   .kcard .kstatcol{display:flex;flex-direction:column;gap:3px}
-  .kcard .kstat{display:flex;align-items:center;gap:5px;color:#2b2b2b}
-  .kcard .kstat svg{width:15px;height:15px;flex:0 0 15px;display:block}
+  .kcard .kstat{display:flex;align-items:center;gap:4px;color:#2b2b2b}
+  /* Each stat icon sits on its own little white tile, like the game's stat rows. */
+  .kcard .kstat svg{width:15px;height:15px;flex:0 0 15px;display:block;box-sizing:content-box;
+    background:var(--paper3);border:1.5px solid var(--ink);border-radius:4px;padding:1px 2px}
   .kcard .kstat .kval{font-size:11.5px;font-weight:800;color:var(--ink);background:var(--paper3);
     border:1.5px solid var(--ink);border-radius:5px;padding:0 5px;min-width:23px;text-align:center;line-height:1.5}
+  /* KNOWN bonus/malus (decoded mutations + items + injuries) as the game's coloured circle.
+     Level bonuses are NOT decoded, so this is partial — the tooltip says so. */
+  .kcard .kbon{font-size:9px;font-weight:800;color:#fff;border:1.5px solid var(--ink);border-radius:50%;
+    width:16px;height:16px;flex:0 0 16px;text-align:center;line-height:13px;display:inline-block}
+  .kcard .kbon.up{background:#4f8a4a} .kcard .kbon.down{background:#a8504a}
+  /* Wounded stat mark (a decoded injury reduces this stat) — the game's red cross. */
+  .kcard .kwound{color:#b33636;font-weight:900;font-size:12px;line-height:1;margin-left:-1px}
+  .kcard .kstat.hurt .kval{border-color:#b33636;color:#8f2b2b}
   /* Internal-values triplet: [effective][base][modifier], mirroring the in-game sheet.
      The effective box is tinted only when a modifier actually moves it. */
   .kcard .keff{font-size:11.5px;font-weight:700;color:#1b4332;background:#e8f5ec;
@@ -1371,18 +1395,40 @@ function exactEffectiveCon(s){
 // never mistaken for a decoded value.
 function derivedMp(cha){ return Number.isInteger(cha) ? cha * 3 : null; }
 
+// Per-stat KNOWN deltas, mirroring the game's green-bonus / wounded-stat marks. Only from data
+// we actually decode: mutations+items (knownMods) and injury penalties. Level bonuses are NOT
+// decoded, so this is a partial picture — the badge is labelled as such and the BASE value shown
+// next to it stays the honest decoded number. Returns {delta:{stat:n}, wounded:Set}.
+function statDeltas(cat){
+  const delta = {}, wounded = new Set();
+  const mods = (typeof knownMods === 'function' && cat) ? (knownMods(cat) || {}) : {};
+  for (const k in mods) delta[k] = (delta[k] || 0) + mods[k];
+  for (const inj of (cat && cat.injuries) || []){
+    for (const k in (inj.penalty || {})){
+      delta[k] = (delta[k] || 0) + inj.penalty[k] * (inj.count || 1);
+      wounded.add(k);                      // an injury touches this stat -> the game's wound mark
+    }
+  }
+  return { delta, wounded };
+}
 function statsBlock(s, cat, internals){
   if (!s) return '';
   const mods = internals ? knownMods(cat) : null;
   const effCon = internals ? exactEffectiveCon(s) : null;
   let usedExactCon = false;
+  const dl = statDeltas(cat);
   const grid = STAT_COLS.map(col => {
     const rows = col.filter(k => s[k] != null).map(k => {
       const label = STAT_LABEL[k] || k.toUpperCase();
       const base = s[k];
       if (!internals) {
-        return `<div class="kstat" title="${esc(label)} ${esc(String(base))} (base)">` +
-          `${statIcon(k)}<span class="kval">${esc(String(base))}</span></div>`;
+        // Game-style row: [icon on a tile] [base on its tile] [known +/- badge] [wound mark].
+        const d = dl.delta[k] || 0;
+        const hurt = dl.wounded.has(k);
+        const badge = d ? `<span class="kbon ${d > 0 ? 'up' : 'down'}" title="${esc(label)} ${d > 0 ? '+' : '−'}${Math.abs(d)} from decoded mutations, items and injuries — the game also adds level bonuses, which we do not decode">${d > 0 ? '+' : '−'}${Math.abs(d)}</span>` : '';
+        const mark = hurt ? `<span class="kwound" title="${esc(label)} is reduced by a decoded injury">✚</span>` : '';
+        return `<div class="kstat${hurt ? ' hurt' : ''}" title="${esc(label)} ${esc(String(base))} (base — the decoded value)">` +
+          `${statIcon(k)}<span class="kval">${esc(String(base))}</span>${badge}${mark}</div>`;
       }
       // CON prefers the HP-derived truth; every other stat is the partial rebuild.
       const exact = (k === 'con' && effCon != null);
@@ -1435,6 +1481,20 @@ function mutBlock(c, big){
   return `<div class="kmut">🧬 ${items}</div>`;
 }
 
+// The class DOGTAG the game hangs in the card's top-left corner. Uses the real FontIcon_<Class>
+// emblem (ui-icons.js). '' when the class is unknown.
+function classDogtag(c){
+  if (!c || !c.cls) return '';
+  const ic = classIcon(c.cls);
+  if (!ic) return '';
+  return `<div class="kdogtag" title="${esc(c.cls)}">${ic}</div>`;
+}
+// Mutation COUNT badge, like the game's counter by the portrait. Counts only decoded mutations.
+function mutCounter(c){
+  const n = (c && c.genes && Array.isArray(c.genes.mutations)) ? c.genes.mutations.length : 0;
+  if (!n) return '';
+  return `<div class="kmutcount" title="${n} decoded mutation${n > 1 ? 's' : ''}">🧬 ${n}</div>`;
+}
 // The class rendered as a pet-collar ID tag (ring + real FontIcon_<Class> emblem + name).
 // Returns '' for an unknown/absent class — nothing invented; the name banner still stands alone.
 function collarTag(c){
@@ -1551,6 +1611,7 @@ function kittenCard(c, big){
   const metaGender = (c.gender && !genderIcon(c.gender)) ? esc(c.gender) : '';
   const metaLead = [metaClass, metaGender].filter(Boolean).join(' · ');
   return `<div class="kcard${big?' single':''}">
+    ${classDogtag(c)}
     <div class="kname"><span>${esc(c.name)}</span>${genderIcon(c.gender)}</div>
     ${collar}
     <div class="kmeta">${metaLead}${ageText(c)}</div>
@@ -1561,7 +1622,7 @@ function kittenCard(c, big){
     ${injuryBlock(c)}
     ${itemBlock(c)}
     ${stats}
-    <div class="portrait">${portrait}</div>
+    <div class="kportwrap">${mutCounter(c)}<div class="portrait">${portrait}</div></div>
     ${abils}
     ${(big || c.key == null)?'':`<button class="share-btn" data-key="${esc(String(c.key))}">🔗 Share link</button>`}
     ${approx}
