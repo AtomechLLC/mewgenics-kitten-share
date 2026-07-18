@@ -86,10 +86,10 @@
   /* 3x size, sitting IN FRONT of the name banner (like the game, where the collar overlaps
      the ribbon's end). */
   .kcard .kdogtag.real{background:none;border:none;border-radius:0;box-shadow:none;z-index:6;
-    width:162px;height:156px;top:-30px;left:-24px;transform:rotate(-7deg);
+    width:162px;height:156px;top:-62px;left:-96px;transform:rotate(-7deg);
     filter:drop-shadow(2px 3px 2px rgba(43,38,34,.3))}
   .kcard .kdogtag.real svg{width:100%;height:100%;display:block}
-  .single .kdogtag.real{width:222px;height:213px;top:-42px;left:-34px}
+  .single .kdogtag.real{width:222px;height:213px;top:-86px;left:-132px}
   /* Mutation COUNT badge by the portrait (decoded mutations only). */
   .kcard .kportwrap{position:relative;display:flex;justify-content:center;width:100%}
   .kcard .kmutcount{position:absolute;top:0;left:4px;z-index:3;font-size:10px;font-weight:800;
@@ -1570,7 +1570,12 @@ function itemBlock(c){
     return `<div class="kitem">🎒 ${cells}</div>`;
   }
   ensureUiDefs();   // inject the 69 KB frame ONCE as a <symbol>; slots reference it via <use>
-  const frame = `<svg viewBox="${esc(box.viewBox)}" aria-hidden="true"><use href="#ui-itembox"/></svg>`;
+  // NOTE the viewBox here is NOT the symbol's. A <symbol> carries its own viewBox, so <use>
+  // re-maps the art into the use viewport starting at (0,0) — reusing the symbol's own
+  // "-70 -58 …" box shoved the frame into the bottom-right quadrant and clipped it. Give the
+  // outer svg a 0-origin box the same SIZE as the symbol's, and size the <use> to fill it.
+  const frame = `<svg viewBox="0 0 140 116" preserveAspectRatio="xMidYMid meet" aria-hidden="true">` +
+    `<use href="#ui-itembox" width="140" height="116"/></svg>`;
   const cells = its.map(i => {
     // Real item icon (item-icons.js maps the blob's item key -> the vendored icon). The per-slot
     // emoji is only a FALLBACK for the ~4% of items with no wiki record — never a wrong icon.
