@@ -18,7 +18,17 @@
   .dl-btn:hover{background:#1b4332}
   .count{font-size:12px;color:#888;margin-bottom:6px}
   .tbl-wrap{overflow-x:auto;border:1px solid #ddd;border-radius:8px;background:#fff}
-  table{border-collapse:collapse;width:100%;min-width:640px}
+  table{border-collapse:collapse;width:100%;min-width:700px}
+  /* Part-art column: the mutation's REAL in-game art (see mutation-art.js). Thumbnails are
+     <img> data-URLs, not inline SVG — the browser rasterizes each once and blits it while
+     scrolling, which keeps a 376-row table smooth (inline vector art repaints every tick). */
+  .art-th{width:64px}
+  td.art{width:64px;padding:2px 6px}
+  td.art img{width:54px;height:54px;display:block;object-fit:contain;image-rendering:auto}
+  /* No confirmed art (e.g. the "no ears"/"no tail" REMOVAL mutations, whose part is absent
+     by definition) — show a neutral dash, never a stand-in part from another mutation. */
+  td.art .noart{width:54px;height:54px;display:flex;align-items:center;justify-content:center;
+    color:#c9c3b8;font-size:16px;border:1px dashed #e3ddd2;border-radius:6px}
   thead th{
     background:#1a1a2e;color:#fff;
     font-size:12px;font-weight:600;
@@ -60,7 +70,8 @@
 <body>
 
 <h1>Mewgenics — All Mutations by Slot</h1>
-<p class="subtitle">Named mutations only · Generic stat mutations (e.g. Body 400–442) excluded · Click column headers to sort · Data sourced from mewgenics.wiki</p>
+<p class="subtitle">Named mutations only · Generic stat mutations (e.g. Body 400–442) excluded · Click column headers to sort · Data sourced from mewgenics.wiki<br>
+<b>Part art is the real in-game sprite</b> for that mutation, pulled from the game's own <code>catparts.swf</code> (shown uncoloured, as authored — a cat tints it with its coat palette). A few rows have no art: the “no ears”/“no tail” mutations remove the part entirely.</p>
 
 <div class="controls">
   <input type="search" id="srch" placeholder="Search mutations…" oninput="renderTable()">
@@ -73,6 +84,7 @@
   <table>
     <thead>
       <tr>
+        <th class="art-th" title="The mutation's real in-game art, from the game's own catparts.swf">Part</th>
         <th onclick="sortBy(0)" id="th0">Name</th>
         <th onclick="sortBy(1)" id="th1">Slot</th>
         <th onclick="sortBy(2)" id="th2">Effect</th>
@@ -504,6 +516,85 @@ let activeSlot = "all";
 let sortCol = -1;
 let sortDir = 1; // 1=asc, -1=desc
 
+// ---- mutation part art -------------------------------------------------------------
+// A mutation IS a body part: its id is a frame index into that slot's catparts.swf master
+// sprite. tools/export-mutation-art.js joins this page's rows to the game's mutation catalog
+// by NAME and emits the real rendered frame, keyed by "<slot>:<normalized name>" — so there is
+// no runtime join here and the two can't drift. 363 of 376 rows resolve; the rest (mostly the
+// "no ears"/"no tail" REMOVAL mutations, which have no part by definition) render a dash.
+//
+// The asset is ~1.9 MB, so it is LAZY-loaded after the table is already on screen: the page
+// stays instant, art fills in on arrival, and a failed fetch just leaves the dashes.
+let MUT_ART = null;
+const normName = s => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+
+// Rig matrices + per-sprite framing lifted from parts-browser.html, so each part is shown in
+// its real ON-CAT orientation and scale rather than raw sprite space.
+const ART_GROUP = { tx: 3.85, ty: -47.95 };
+const ART_RIG = {
+  CatTail:   { sx:0.59964,  r0:0.162415, r1:-0.162415, sy:0.59964,  tx:-24.45, ty:10.05 },
+  CatBody:   { sx:0.621307, r0:0.004456, r1:-0.01178,  sy:0.621109, tx:-0.4,   ty:16.35 },
+  CatLeg:    { sx:0.621262, r0:0, r1:0, sy:0.621262, tx:-4.7,  ty:37.25 },
+  CatHead:   { sx:0.621262, r0:0, r1:0, sy:0.621262, tx:10.95, ty:2.3 },
+  CatEar:    { sx:0.621262, r0:0, r1:0, sy:0.621262, tx:10.95, ty:2.3 },
+  CatEye:    { sx:0.621262, r0:0, r1:0, sy:0.621262, tx:10.95, ty:2.3 },
+  CatEyebrow:{ sx:0.621262, r0:0, r1:0, sy:0.621262, tx:10.95, ty:2.3 },
+  CatMouth:  { sx:0.621262, r0:0, r1:0, sy:0.621262, tx:10.95, ty:2.3 },
+  CatTexture:{ sx:0.621262, r0:0, r1:0, sy:0.621262, tx:10.95, ty:2.3 },
+};
+const ART_VIEWBOX = {
+  CatTail:'-95 -95 90 90', CatHead:'-40 -95 90 90', CatBody:'-55 -75 110 110',
+  CatLeg:'-55 -60 90 90',  CatEar:'-40 -95 90 90',  CatEye:'-30 -70 60 60',
+  CatEyebrow:'-30 -75 60 60', CatMouth:'-30 -55 60 60', CatTexture:'-45 -80 100 100',
+};
+let __artUid = 0;
+// Frames reuse mask/gradient ids ("mask626"); several thumbnails on one page would make the
+// browser resolve url(#id) to the FIRST match and mis-clip, so namespace per instance.
+function artNamespace(defs, body){
+  const ids = [...new Set((defs.match(/id="([^"]+)"/g) || []).map(s => s.slice(4, -1)))];
+  if (!ids.length) return { defs, body };
+  const suf = '_m' + (__artUid++);
+  for (const id of ids){
+    defs = defs.split('id="'+id+'"').join('id="'+id+suf+'"');
+    defs = defs.split('#'+id+')').join('#'+id+suf+')');
+    defs = defs.split('#'+id+'"').join('#'+id+suf+'"');
+    body = body.split('#'+id+')').join('#'+id+suf+')');
+    body = body.split('#'+id+'"').join('#'+id+suf+'"');
+  }
+  return { defs, body };
+}
+function artMat(m){ return `matrix(${m.sx==null?1:m.sx} ${m.r0||0} ${m.r1||0} ${m.sy==null?1:m.sy} ${m.tx||0} ${m.ty||0})`; }
+// -> <img> data-URL cell for a row, or the honest "no art" dash.
+function artCell(name, slot){
+  const a = MUT_ART && MUT_ART[slot + ':' + normName(name)];
+  if (!a) return `<td class="art"><div class="noart" title="${MUT_ART ? 'No confirmed art for this mutation' : 'Loading part art…'}">–</div></td>`;
+  const ns = a.defs ? artNamespace(a.defs, a.body) : { defs:'', body:a.body };
+  const vb = ART_VIEWBOX[a.sprite] || '-80 -100 170 135';
+  const rig = ART_RIG[a.sprite] || { sx:0.62, sy:0.62 };
+  // xmlns is REQUIRED for an SVG served through an <img> data-URL.
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb}">`+
+    `<defs>${ns.defs}</defs>`+
+    `<g transform="matrix(1 0 0 1 ${ART_GROUP.tx} ${ART_GROUP.ty})"><g transform="${artMat(rig)}">${ns.body}</g></g>`+
+    `</svg>`;
+  const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  const alt = `${name} (${slot} part #${a.id})`;
+  // Plain <img> data-URL, NOT loading="lazy": the bytes are already inline (nothing to defer over
+  // the network), and the browser rasterizes each once then blits the cached bitmap while
+  // scrolling — the same fix the kittenshare grid uses for many-vector-portraits jank.
+  return `<td class="art"><img src="${url}" alt="${alt.replace(/"/g,'&quot;')}" title="${alt.replace(/"/g,'&quot;')} — real in-game art"></td>`;
+}
+function loadMutationArt(){
+  fetch('kittenshare/mutation-art.js')
+    .then(r => r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)))
+    .then(t => {
+      // fetch+eval (not a <script> tag) so the 1.9 MB never blocks first paint, and the
+      // asset's `const MUTATION_ART` stays scoped inside new Function().
+      MUT_ART = (new Function(t + '\nreturn MUTATION_ART;'))();
+      renderTable();
+    })
+    .catch(() => { /* art is optional — the table already works without it */ });
+}
+
 function getVisible() {
   const q = document.getElementById('srch').value.toLowerCase();
   return data.filter(([name,slot,effect,type]) => {
@@ -520,9 +611,10 @@ function sortBy(col) {
     sortCol = col;
     sortDir = 1;
   }
+  // The art column is th[0] and carries no data, so data column `col` is DOM header col+1.
   document.querySelectorAll('thead th').forEach((th, i) => {
     th.classList.remove('sort-asc','sort-desc');
-    if (i === col) th.classList.add(sortDir === 1 ? 'sort-asc' : 'sort-desc');
+    if (i === col + 1) th.classList.add(sortDir === 1 ? 'sort-asc' : 'sort-desc');
   });
   renderTable();
 }
@@ -538,7 +630,7 @@ function renderTable() {
   }
   const tbody = document.getElementById('tbody');
   if (rows.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="4" class="no-results">No results found</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="no-results">No results found</td></tr>';
     document.getElementById('cnt').textContent = 'No entries match';
     return;
   }
@@ -546,6 +638,7 @@ function renderTable() {
     const isDefect = type === 'defect';
     const defBadge = isDefect ? '<span class="defect-badge">defect</span>' : '';
     return `<tr>
+      ${artCell(name, slot)}
       <td><strong style="font-weight:600">${name}</strong>${defBadge}</td>
       <td><span class="slot-badge ${slotColors[slot]}">${slotIcon(slot)}${slot}</span></td>
       <td class="effect">${effect}</td>
@@ -587,6 +680,20 @@ function downloadCSV() {
 }
 
 renderTable();
+loadMutationArt();   // lazy: table is already painted; thumbnails fill in on arrival
+
+// #m=<mutation name> deep link (KittenShare cards link here): put the name in the search box,
+// re-render, and highlight the first matching row.
+(function(){
+  const m = location.hash.match(/^#m=(.+)$/);
+  if (!m) return;
+  document.getElementById('srch').value = decodeURIComponent(m[1]);
+  renderTable();
+  requestAnimationFrame(() => {
+    const row = document.querySelector('tbody tr');
+    if (row) { row.style.outline = '2px solid #c0913f'; row.style.background = '#fdf3d6'; row.scrollIntoView({ block: 'center' }); }
+  });
+})();
 </script>
 </body>
 </html>

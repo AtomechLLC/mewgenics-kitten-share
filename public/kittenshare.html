@@ -136,8 +136,24 @@
   .cmp-btn:hover{background:var(--paper2)}
   .cmp-btn.on{background:var(--ink);color:var(--paper3)}
   .comparebar{position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:30;
-    display:flex;gap:8px;background:#f7f3ec;padding:8px 12px;border:2px solid var(--ink);
+    display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center;max-width:92vw;
+    background:#f7f3ec;padding:8px 12px;border:2px solid var(--ink);
     border-radius:12px 9px 11px 9px/9px 11px 9px 12px;box-shadow:2px 3px 0 rgba(43,38,34,.2)}
+  /* Named chips for the picked cats — click one to drop it from the compare set. */
+  .cmpchips{display:inline-flex;gap:6px;flex-wrap:wrap}
+  .cmpchip{font-family:var(--hand);font-size:12px;font-weight:800;color:var(--ink);
+    background:var(--paper3);border:2px solid var(--ink);border-radius:9px;padding:2px 9px;cursor:pointer}
+  .cmpchip:hover{background:#f3d9d5;text-decoration:line-through}
+  /* Sort-direction flip: inked-in when the direction is reversed. */
+  .sortflip.on{background:var(--ink);color:var(--paper3)}
+  /* ⭐ star button on each card (left of ⚖); inked-in gold when starred. */
+  .star-btn{position:absolute;top:-6px;right:56px;z-index:7;width:26px;height:26px;
+    font-size:13px;line-height:1;color:var(--ink);background:var(--paper3);
+    border:2px solid var(--ink);border-radius:7px 5px 6px 5px/5px 6px 5px 7px;cursor:pointer;
+    box-shadow:1px 1px 0 rgba(43,38,34,.2);padding:0;filter:grayscale(1);opacity:.8}
+  .star-btn.on{filter:none;opacity:1;background:#fdf3d6}
+  .star-btn:hover{background:var(--paper2)}
+  @media (pointer:coarse){ .star-btn{width:36px;height:36px;font-size:16px;right:78px;top:-8px} }
   /* Overlay dialogs (compare / analytics): paper panel over a dimmed page. */
   .overlay{position:fixed;inset:0;z-index:40;background:rgba(43,38,34,.45);
     display:flex;align-items:flex-start;justify-content:center;padding:4vh 12px;overflow:auto}
@@ -153,6 +169,8 @@
   .overlay th,.overlay td{border:1.5px solid var(--ink);padding:3px 8px;text-align:left;background:var(--paper3)}
   .overlay th{background:var(--paper)}
   .overlay td.best{background:#e2efdd;font-weight:800}
+  .overlay tr.drill{cursor:pointer}
+  .overlay tr.drill:hover td{background:var(--paper2);text-decoration:underline}
   .overlay .dim{color:var(--ink-soft);font-size:12px}
   .controls .tgl{color:var(--ink-soft)}
   /* Accuracy notes as a collapsed paper tag — accurate but debug-flavoured, so opt-in. */
@@ -288,6 +306,9 @@
   .kcard .kislot .kiemoji{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:19px;line-height:1}
   .kcard .kislot .kiname{font-size:9px;font-weight:700;color:var(--ink);line-height:1.15;margin-top:1px;
     overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  /* Reference deep-links (item + mutation names) look like the plain text until hovered. */
+  .kcard .kiname a,.kcard .kmut-n{color:inherit;text-decoration:none}
+  .kcard .kiname a:hover,.kcard .kmut-n:hover{text-decoration:underline}
   .single .kislot{width:62px} .single .kislot .kibox{width:52px;height:52px} .single .kislot .kibox svg{width:52px;height:52px}
   .single .kislot .kiemoji{font-size:23px}
   /* Abilities sit BELOW the stat block, like the game's sheet, and each is a full row:
@@ -515,10 +536,12 @@
         <option value="lck">highest LCK</option>
         <option value="hp">highest HP</option>
       </select>
+      <button class="rand-btn sortflip" id="sortFlip" title="Flip the sort direction (e.g. lowest stat / youngest first)" aria-label="Flip sort direction" onclick="toggleSortFlip()">⇅</button>
       <span class="ctlspacer"></span>
       <button class="rand-btn" id="randBtn" title="Open a random kitten from your roster" onclick="openRandomCard()">🎲 random</button>
       <button class="rand-btn" title="Roster analytics: stat bests, class distribution, mutation and ability censuses" onclick="showAnalytics()">📊 stats</button>
-      <button class="rand-btn" title="Download the whole roster (stats, abilities, items, mutations, injuries) as a CSV spreadsheet" onclick="exportCsv()">⬇ CSV</button>
+      <button class="rand-btn" title="Download the WHOLE roster (stats, abilities, items, mutations, injuries) as a CSV spreadsheet" onclick="exportCsv(false)">⬇ CSV all</button>
+      <button class="rand-btn" title="Download only the cats matching the current search/filters/sort as a CSV spreadsheet" onclick="exportCsv(true)">⬇ CSV view</button>
     </div>
     <!-- Row 2: labelled toggle groups — roster FILTERS vs card VIEW options. -->
     <div class="ctlrow">
@@ -537,6 +560,9 @@
         </label>
         <label class="tgl" title="Show only cats whose FULL gene set (all 14 part frames + fur pattern + coat) is byte-identical to another cat's — true clones. Twins are sorted adjacent.">
           <input type="checkbox" id="clonesOnly" onchange="renderCards()"> clones
+        </label>
+        <label class="tgl" title="Show only the cats you've starred (the ⭐ button on each card). Stars persist across visits.">
+          <input type="checkbox" id="starredOnly" onchange="renderCards()"> ⭐ starred
         </label>
       </span>
       <span class="ctlgroup"><span class="ctlname">view</span>
@@ -560,6 +586,7 @@
   <button class="totop" id="toTop" title="Back to top" aria-label="Back to top" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</button>
   <!-- Floating compare tray: appears once 2+ cats are ticked with the ⚖ card button. -->
   <div class="comparebar" id="compareBar" style="display:none">
+    <span class="cmpchips" id="cmpChips"></span>
     <button class="cta-btn" onclick="showCompare()">⚖ compare (<span id="cmpN">0</span>)</button>
     <button class="cta-btn alt" onclick="shareTeam(this)" title="Copy ONE link that shows all the picked kittens side by side">🔗 share team</button>
     <button class="cta-btn alt" onclick="clearCompare()">clear</button>
@@ -1464,7 +1491,7 @@ function searchHay(c){
 // Search grammar: whitespace-separated tokens, ALL must hold. A token shaped like
 // `cha>=8` / `spd=10` / `hp>20` is a STAT PREDICATE on the decoded base stats; anything else
 // is a substring match on the haystack. So `medic cha>=8` = Medics with base CHA ≥ 8.
-const STAT_Q = /^(str|dex|con|int|spd|cha|lck|hp)(>=|<=|=|>|<)(\d+)$/;
+const STAT_Q = /^(str|dex|con|int|spd|cha|lck|hp|age)(>=|<=|=|>|<)(\d+)$/;
 function parseQuery(q){
   const preds = [], terms = [];
   for (const tok of q.split(/\s+/).filter(Boolean)) {
@@ -1472,13 +1499,42 @@ function parseQuery(q){
     if (m) {
       const [, k, op, nStr] = m; const n = +nStr;
       preds.push(c => {
-        const v = c.stats && c.stats[k];
-        if (v == null) return false;                    // undecoded never satisfies a predicate
+        // `age` predicates use the same honestly-computed age as the card tag; the 7 stats + hp
+        // read the decoded base values. Undecoded never satisfies a predicate.
+        const v = k === 'age' ? catAge(c.birthDay, CURRENT_DAY, c.deathDay) : (c.stats && c.stats[k]);
+        if (v == null) return false;
         return op === '>=' ? v >= n : op === '<=' ? v <= n : op === '>' ? v > n : op === '<' ? v < n : v === n;
       });
     } else terms.push(tok);
   }
   return { preds, terms };
+}
+// ---- ⭐ favorites (localStorage; keyed by "<key>:<name>" so a re-dropped save re-matches) ----
+let __stars = null;
+function starSet(){
+  if (__stars) return __stars;
+  try { __stars = new Set(JSON.parse(localStorage.getItem('ks-stars') || '[]')); }
+  catch (e) { __stars = new Set(); }
+  return __stars;
+}
+function starId(c){ return `${c.key}:${c.name}`; }
+function isStarred(c){ return c && c.key != null && starSet().has(starId(c)); }
+function toggleStar(key, btn){
+  const c = allCats.find(x => x.key === key);
+  if (!c) return;
+  const s = starSet(), id = starId(c);
+  s.has(id) ? s.delete(id) : s.add(id);
+  try { localStorage.setItem('ks-stars', JSON.stringify([...s])); } catch (e) {}
+  btn.classList.toggle('on', s.has(id));
+  const so = document.getElementById('starredOnly');
+  if (so && so.checked) renderCards(true);   // un-starring inside the starred view removes the card
+}
+// ---- sort direction ----
+let __sortFlip = false;
+function toggleSortFlip(){
+  __sortFlip = !__sortFlip;
+  document.getElementById('sortFlip').classList.toggle('on', __sortFlip);
+  renderCards();
 }
 function sortCats(cats, mode){
   const by = f => cats.slice().sort((a, b) => f(a) - f(b) || String(a.name).localeCompare(String(b.name)));
@@ -1535,10 +1591,10 @@ function buildClassFilter(){
 // View settings persist across visits (localStorage) — the workbench comes back as you left
 // it after re-dropping the save. Search text deliberately does NOT persist (a stale query
 // showing 3 cats after a reload reads as data loss). try/catch: private mode has no storage.
-const VIEW_KEYS = ['houseOnly','hideDead','hideInjured','mutantsOnly','clonesOnly','detailedStats','debugInfo','compactCards'];
+const VIEW_KEYS = ['houseOnly','hideDead','hideInjured','mutantsOnly','clonesOnly','starredOnly','detailedStats','debugInfo','compactCards'];
 function saveViewSettings(){
   try {
-    const v = { sort: (document.getElementById('sortSel')||{}).value, classFilter: __classFilter };
+    const v = { sort: (document.getElementById('sortSel')||{}).value, classFilter: __classFilter, sortFlip: __sortFlip };
     for (const id of VIEW_KEYS) { const cb = document.getElementById(id); if (cb) v[id] = cb.checked; }
     localStorage.setItem('ks-view', JSON.stringify(v));
   } catch (e) {}
@@ -1551,6 +1607,9 @@ function loadViewSettings(){
     const sel = document.getElementById('sortSel');
     if (sel && v.sort && [...sel.options].some(o => o.value === v.sort)) sel.value = v.sort;
     if (typeof v.classFilter === 'string') __classFilter = v.classFilter;
+    __sortFlip = !!v.sortFlip;
+    const sf = document.getElementById('sortFlip');
+    if (sf) sf.classList.toggle('on', __sortFlip);
     document.getElementById('cards').classList.toggle('compact', !!v.compactCards);
   } catch (e) {}
 }
@@ -1558,15 +1617,17 @@ function loadViewSettings(){
 // grid extends it 120 at a time (rendering all 1298 SVG puppets at once is a multi-second paint).
 let __showLimit = 120;
 function showMoreCards(){ __showLimit += 120; renderCards(true); }
-function renderCards(keepLimit){
-  if (!keepLimit) __showLimit = 120;
-  buildClassFilter();
+function showAllCards(){ __showLimit = Infinity; renderCards(true); }
+// The filtered+sorted roster the grid shows — shared with the "CSV view" export so what you
+// see is exactly what you get.
+function visibleCats(){
   const srch = document.getElementById('srch');
   const q = (srch.value||'').toLowerCase();
   srch.parentElement.classList.toggle('hasq', q.length > 0);   // shows the ✕ clear button
   const on = id => { const cb = document.getElementById(id); return !!(cb && cb.checked); };
   const houseOnly = on('houseOnly'), hideDead = on('hideDead'),
-        hideInjured = on('hideInjured'), mutantsOnly = on('mutantsOnly'), clonesOnly = on('clonesOnly');
+        hideInjured = on('hideInjured'), mutantsOnly = on('mutantsOnly'),
+        clonesOnly = on('clonesOnly'), starredOnly = on('starredOnly');
   const { preds, terms } = parseQuery(q);
   // Clone census: gene-signature counts across the whole roster (cheap; memoized sigs).
   let sigCount = null;
@@ -1580,13 +1641,21 @@ function renderCards(keepLimit){
     (!hideInjured || !(c.injuries && c.injuries.length)) &&
     (!mutantsOnly || !!(c.genes && c.genes.mutations && c.genes.mutations.length)) &&
     (!clonesOnly || (sigCount.get(geneSig(c)) || 0) >= 2) &&
+    (!starredOnly || isStarred(c)) &&
     (!__classFilter || c.cls === __classFilter) &&
     preds.every(p => p(c)) &&
     (!terms.length || terms.every(t => searchHay(c).includes(t))));
   cats = sortCats(cats, (document.getElementById('sortSel')||{}).value);
+  if (__sortFlip) cats = cats.slice().reverse();   // lowest stat / youngest / Z–A views
   // Clones view groups twins adjacent regardless of the sort — the whole point is seeing them
   // side by side.
   if (clonesOnly) cats = cats.slice().sort((a, b) => String(geneSig(a)).localeCompare(String(geneSig(b))) || String(a.name).localeCompare(String(b.name)));
+  return { cats, q };
+}
+function renderCards(keepLimit){
+  if (!keepLimit) __showLimit = 120;
+  buildClassFilter();
+  const { cats, q } = visibleCats();
   document.getElementById('cnt').textContent = `Showing ${Math.min(cats.length, __showLimit)} of ${cats.length}`;
   saveViewSettings();   // before the empty-state early-return, so filters persist even then
   const el = document.getElementById('cards');
@@ -1599,7 +1668,10 @@ function renderCards(keepLimit){
   }
   const shown = cats.slice(0, __showLimit);
   el.innerHTML = shown.map(c => kittenCard(c, false)).join('') +
-    (cats.length > __showLimit ? `<div class="morebar"><button class="cta-btn" onclick="showMoreCards()">show ${Math.min(120, cats.length - __showLimit)} more (${cats.length - __showLimit} left)</button></div>` : '');
+    (cats.length > __showLimit ? `<div class="morebar">
+      <button class="cta-btn" onclick="showMoreCards()">show ${Math.min(120, cats.length - __showLimit)} more (${cats.length - __showLimit} left)</button>
+      <button class="cta-btn alt" onclick="showAllCards()" title="Render every matching card at once so Ctrl+F works across the whole roster — expect a multi-second paint">show all ${cats.length} (slow)</button>
+    </div>` : '');
   // SPIKE: animate on-screen cards only. __gridCats is DOM-order (matches the cards just written).
   __gridCats = shown;
   if (typeof setupGridAnim === 'function') setupGridAnim();
@@ -1614,6 +1686,7 @@ function showSearchHelp(){
     <table>
       <tr><th>snipe</th><td>text match — names, classes, abilities, items, mutations, mutation effects, injuries</td></tr>
       <tr><th>cha>=8</th><td>stat filter on the decoded base stats: <b>str dex con int spd cha lck hp</b> with <b>&gt; &gt;= = &lt;= &lt;</b></td></tr>
+      <tr><th>age>=200</th><td>age filter — same honestly-computed age as the card tag (cats without one never match)</td></tr>
       <tr><th>medic cha=7</th><td>tokens combine with AND — Medics whose base CHA is exactly 7</td></tr>
       <tr><th>+2 cha</th><td>finds cats with a mutation whose decoded effect is "+2 CHA"</td></tr>
       <tr><th>broken leg</th><td>finds cats carrying that injury</td></tr>
@@ -1928,9 +2001,14 @@ function mutBlock(c, big){
   const ms = (c.genes && Array.isArray(c.genes.mutations)) ? c.genes.mutations : [];
   if (!ms.length) return '';
   const items = ms.map(m => {
-    const cls = m.inCatalog ? '' : ' class="unknownmut"';
     const desc = (big && m.effect) ? `<span class="mdesc">${esc(m.effect)}</span>` : '';
-    return `<span class="mreg">${esc(m.region)}:</span> <b${cls}>${esc(m.name)}</b>${desc}`;
+    // Catalogued mutations deep-link into the mutations reference (searched + highlighted,
+    // with its real part art); unknown ids stay plain text — no link to a page that can't
+    // know them.
+    const name = m.inCatalog
+      ? `<a class="kmut-n" href="mutations.html#m=${esc(encodeURIComponent(m.name))}" target="_blank" rel="noopener" title="open ${esc(m.name)} in the mutations reference"><b>${esc(m.name)}</b></a>`
+      : `<b class="unknownmut">${esc(m.name)}</b>`;
+    return `<span class="mreg">${esc(m.region)}:</span> ${name}${desc}`;
   }).join(big ? '' : ' · ');
   return `<div class="kmut">🧬 ${items}</div>`;
 }
@@ -2006,7 +2084,7 @@ function itemBlock(c){
       : `<span class="kiemoji">${ITEM_KIND_ICON[i.kind] || '•'}</span>`;
     return `<div class="kislot" title="${esc(i.name)} — ${esc(i.kind)}">` +
       `<div class="kibox">${icon}</div>` +
-      `<div class="kiname">${esc(i.name)}</div></div>`;
+      `<div class="kiname"><a href="items.html#i=${esc(encodeURIComponent(i.name))}" target="_blank" rel="noopener" title="open ${esc(i.name)} in the items reference">${esc(i.name)}</a></div></div>`;
   }).join('');
   return `<div class="kitemgrid">${cells}</div>`;
 }
@@ -2075,7 +2153,8 @@ function kittenCard(c, big){
   // and stray clicks stay inert. The button is natively focusable, so keyboard access rides it.
   const openBtn = (!big && c.key != null)
     ? `<button class="opencard-btn" data-key="${esc(String(c.key))}" title="open ${esc(c.name)}'s card in a new tab" aria-label="open ${esc(c.name)}'s card in a new tab">⧉</button>` +
-      `<button class="cmp-btn${__compareSet.has(c.key) ? ' on' : ''}" data-key="${esc(String(c.key))}" title="pick ${esc(c.name)} for side-by-side compare (up to 3)" aria-label="compare ${esc(c.name)}">⚖</button>`
+      `<button class="cmp-btn${__compareSet.has(c.key) ? ' on' : ''}" data-key="${esc(String(c.key))}" title="pick ${esc(c.name)} for side-by-side compare (up to 3)" aria-label="compare ${esc(c.name)}">⚖</button>` +
+      `<button class="star-btn${isStarred(c) ? ' on' : ''}" data-key="${esc(String(c.key))}" title="star ${esc(c.name)} (persists across visits)" aria-label="star ${esc(c.name)}">⭐</button>`
     : '';
   return `<div class="kcard${big?' single':''}">
     ${openBtn}
@@ -2379,6 +2458,8 @@ document.getElementById('cards').addEventListener('click', e => {
   if (ob) { openCard(Number(ob.dataset.key)); return; }
   const cb = e.target.closest('.cmp-btn');
   if (cb) { toggleCompare(Number(cb.dataset.key), cb); return; }
+  const sb = e.target.closest('.star-btn');
+  if (sb) { toggleStar(Number(sb.dataset.key), sb); return; }
   const b = e.target.closest('.share-btn');
   if (b) share(Number(b.dataset.key), b);
 });
@@ -2390,14 +2471,33 @@ function toggleCompare(key, btn){
     if (__compareSet.size >= 3) return;      // hard cap; the table is 3 columns max
     __compareSet.add(key);
   }
-  btn.classList.toggle('on', __compareSet.has(key));
+  if (btn) btn.classList.toggle('on', __compareSet.has(key));
+  updateCompareBar();
+}
+// The tray names its picks — click a chip to drop that cat without hunting its card down
+// in the grid.
+function updateCompareBar(){
   const bar = document.getElementById('compareBar');
   document.getElementById('cmpN').textContent = __compareSet.size;
+  document.getElementById('cmpChips').innerHTML = [...__compareSet]
+    .map(k => allCats.find(c => c.key === k)).filter(Boolean)
+    .map(c => `<button class="cmpchip" data-key="${esc(String(c.key))}" title="remove ${esc(c.name)} from the compare picks">${esc(c.name)}</button>`)
+    .join('');
   bar.style.display = __compareSet.size >= 2 ? 'flex' : 'none';
 }
+document.getElementById('cmpChips').addEventListener('click', e => {
+  const chip = e.target.closest('.cmpchip');
+  if (!chip) return;
+  const key = Number(chip.dataset.key);
+  __compareSet.delete(key);
+  const cardBtn = document.querySelector(`#cards .cmp-btn[data-key="${key}"]`);
+  if (cardBtn) cardBtn.classList.remove('on');
+  updateCompareBar();
+});
 function clearCompare(){
   __compareSet.clear();
   document.getElementById('compareBar').style.display = 'none';
+  document.getElementById('cmpChips').innerHTML = '';
   document.querySelectorAll('#cards .cmp-btn.on').forEach(b => b.classList.remove('on'));
 }
 // ONE link for the whole picked team: standard v1 blobs joined by '.' under #t=. Reuses the
@@ -2458,7 +2558,29 @@ function showCompare(){
     ${listRow('items', c => (c.items || []).map(i => i.name))}
     ${listRow('mutations', c => ((c.genes && c.genes.mutations) || []).map(m => m.name + (m.effect ? ` (${m.effect})` : '')))}
     ${listRow('injuries', c => (c.injuries || []).map(j => j.name + (j.count > 1 ? ` ×${j.count}` : '')))}
-  </table><div class="dim" style="margin-top:8px">base stats only — level bonuses aren't decoded, so in-game effective values can differ</div>`);
+  </table>
+  <p style="margin-top:10px"><button class="cta-btn alt" onclick="copyCompareText(this)">📋 copy as text</button></p>
+  <div class="dim" style="margin-top:8px">base stats only — level bonuses aren't decoded, so in-game effective values can differ</div>`);
+}
+// Plain-text rendition of the compare table (aligned columns) — for pasting into Discord,
+// where these debates actually happen.
+function copyCompareText(btn){
+  const cats = [...__compareSet].map(k => allCats.find(c => c.key === k)).filter(Boolean);
+  if (cats.length < 2) return;
+  const rows = [['', ...cats.map(c => c.name)], ['class', ...cats.map(c => c.cls || '—')]];
+  for (const k of STAT_KEYS.concat(['hp'])) rows.push([
+    (STAT_LABEL[k] || k.toUpperCase()), ...cats.map(c => c.stats && c.stats[k] != null ? String(c.stats[k]) : '—')]);
+  rows.push(['total', ...cats.map(c => c.stats ? String(STAT_KEYS.reduce((a, k) => a + (c.stats[k] || 0), 0)) : '—')]);
+  rows.push(['mutations', ...cats.map(c => ((c.genes && c.genes.mutations) || []).map(m => m.name).join(', ') || '—')]);
+  rows.push(['items', ...cats.map(c => (c.items || []).map(i => i.name).join(', ') || '—')]);
+  const widths = rows[0].map((_, i) => Math.max(...rows.map(r => String(r[i]).length)));
+  const text = rows.map(r => r.map((v, i) => String(v).padEnd(widths[i])).join('  ').trimEnd()).join('\n');
+  const ok = () => { btn.textContent = '✅ copied!'; setTimeout(() => { btn.textContent = '📋 copy as text'; }, 1600); };
+  const fail = () => { if (legacyCopy(text)) { ok(); return; } window.prompt('Copy:', text); };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(ok, fail);
+    else if (legacyCopy(text)) ok(); else fail();
+  } catch (e) { fail(); }
 }
 // Roster analytics: censuses over the DECODED fields of the whole roster.
 function showAnalytics(){
@@ -2478,15 +2600,17 @@ function showAnalytics(){
     const names = allCats.filter(c => c.stats && c.stats[k] === best).map(c => c.name);
     return `<tr><th>${esc(STAT_LABEL[k] || k.toUpperCase())}</th><td><b>${best}</b> — ${names.slice(0, 4).map(esc).join(', ')}${names.length > 4 ? ` +${names.length - 4} more` : ''}</td></tr>`;
   }).join('');
-  const census = (get, n) => {
+  // Census rows are BUTTONS: clicking one applies the matching filter/search and closes the
+  // panel — the report doubles as navigation.
+  const census = (get, n, attr) => {
     const m = new Map();
     for (const c of allCats) for (const v of get(c) || []) if (v) m.set(v, (m.get(v) || 0) + 1);
     return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, n)
-      .map(([v, ct]) => `<tr><td>${esc(v)}</td><td><b>${ct}</b></td></tr>`).join('') || '<tr><td class="dim" colspan="2">none</td></tr>';
+      .map(([v, ct]) => `<tr class="drill" ${attr}="${esc(v)}" title="show these cats in the grid"><td>${esc(v)}</td><td><b>${ct}</b></td></tr>`).join('') || '<tr><td class="dim" colspan="2">none</td></tr>';
   };
-  const classes = census(c => c.cls ? [c.cls] : [], 14);
-  const muts = census(c => ((c.genes && c.genes.mutations) || []).map(m => m.name), 10);
-  const abils = census(c => (c.abilities || []).map(a => (typeof ABILITY_INFO !== 'undefined' && ABILITY_INFO[a] && ABILITY_INFO[a].n) || a), 10);
+  const classes = census(c => c.cls ? [c.cls] : [], 14, 'data-cls');
+  const muts = census(c => ((c.genes && c.genes.mutations) || []).map(m => m.name), 10, 'data-q');
+  const abils = census(c => (c.abilities || []).map(a => (typeof ABILITY_INFO !== 'undefined' && ABILITY_INFO[a] && ABILITY_INFO[a].n) || a), 10, 'data-q');
   openOverlay(`<h2>📊 roster stats</h2>
     <div>${total} cats · ${inHouse} in the house · ${dead} dead · ${injured} injured · ${mutants} mutants · ${cloneCats} in clone groups</div>
     <h3>best base stat in the roster</h3><table>${bests}</table>
@@ -2495,12 +2619,15 @@ function showAnalytics(){
     <h3>top 10 abilities</h3><table>${abils}</table>
     <div class="dim" style="margin-top:8px">everything above is counted from decoded save data only</div>`);
 }
-// CSV export of the whole roster (not just the filtered view — spreadsheets filter better).
-function exportCsv(){
+// CSV export — the whole roster, or (viewOnly) exactly the filtered+sorted grid view, so a
+// curated filter becomes a curated spreadsheet.
+function exportCsv(viewOnly){
   if (!allCats.length) return;
+  const source = viewOnly ? visibleCats().cats : allCats;
+  if (!source.length) return;
   const cell = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
   const rows = [['name','class','gender','age','dead','room','str','dex','con','int','spd','cha','lck','hp','abilities','items','mutations','injuries'].map(cell).join(',')];
-  for (const c of allCats) {
+  for (const c of source) {
     const s = c.stats || {};
     rows.push([c.name, c.cls, c.gender, catAge(c.birthDay, CURRENT_DAY, c.deathDay) ?? '',
       c.status === 'dead' ? 'yes' : '', c.room || '',
@@ -2512,7 +2639,7 @@ function exportCsv(){
     ].map(cell).join(','));
   }
   const a = document.createElement('a');
-  a.download = 'kittenshare-roster.csv';
+  a.download = viewOnly ? 'kittenshare-view.csv' : 'kittenshare-roster.csv';
   a.href = URL.createObjectURL(new Blob(['﻿' + rows.join('\r\n')], { type: 'text/csv' }));
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
@@ -2569,6 +2696,22 @@ document.addEventListener('keydown', e => {
 });
 // Clicking the dimmed backdrop (not the paper panel) also closes the dialog.
 document.getElementById('overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeOverlay(); });
+// Analytics drill-down: a class row applies that class filter; a mutation/ability row becomes
+// the search query. Either way the overlay closes and the grid answers.
+document.getElementById('overlayBody').addEventListener('click', e => {
+  const row = e.target.closest('.drill');
+  if (!row) return;
+  if (row.dataset.cls !== undefined) {
+    __classFilter = row.dataset.cls;
+    document.querySelectorAll('#classBtns .class-btn').forEach(x =>
+      x.classList.toggle('active', (x.dataset.cls || null) === __classFilter));
+  } else if (row.dataset.q !== undefined) {
+    document.getElementById('srch').value = row.dataset.q;
+  }
+  closeOverlay();
+  renderCards();
+  window.scrollTo({ top: 0 });
+});
 // Back-to-top appears only after real scrolling (piggybacks the existing passive listener zone).
 addEventListener('scroll', () => {
   const b = document.getElementById('toTop');
