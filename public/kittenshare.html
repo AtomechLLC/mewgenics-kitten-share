@@ -16,7 +16,7 @@
 <meta name="twitter:image" content="kittenshare-og.png">
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:Arial,sans-serif;font-size:14px;color:#222;background:#c6c4bd;padding:1.5rem}
+  body{font-family:Arial,sans-serif;font-size:14px;color:#222;background:#f7f3ec;padding:1.5rem}
   /* Hand-drawn card font. SELF-HOSTED: drop a woff2 at the path below and it upgrades with no
      code change. Until then it falls back to a system hand-font (Comic Sans/Chalkboard/Comic
      Neue), which already gives the Mewgenics feel. Recommended file: Patrick Hand (SIL OFL, free)
@@ -26,18 +26,13 @@
     src:url('kittenshare/fonts/PatrickHand-Regular.woff2') format('woff2');
     font-weight:400 800; font-display:swap;
   }
-  /* --- Mewgenics IN-GAME theme: the desaturated grey scrapbook of the house screen —
-     grey taped paper, white note tags, bold black outlines, dark ability cards. The cat
-     portrait stays in full colour (it's the star; the game greys everything but we don't). --- */
+  /* --- Mewgenics scrapbook theme: aged paper, bold ink outlines, muted palette, taped tags --- */
   :root{
     --hand:'KittenHand','Comic Sans MS','Chalkboard SE','Comic Neue',ui-rounded,cursive;
-    --paper:#dcd9d2; --paper2:#cecbc3; --paper3:#eeece7;   /* grey papers */
-    --note:#f6f5f1;                                        /* white note tag (name, stat values) */
-    --ink:#242320; --ink-soft:#565349;
-    --panel:#e3e1db;                                       /* stat-panel fill */
-    --card-dark:#2c2b28;                                   /* ability-card frame */
-    --tape:rgba(150,148,142,.5);
-    --off:#9c5049; --def:#5a6f83; --oth:#66804a; --spe:#b0863c;   /* muted category colours */
+    --paper:#f2ead6; --paper2:#e9dfc6; --paper3:#fbf6e9;
+    --ink:#2b2622; --ink-soft:#5b5449;
+    --tape:rgba(210,196,150,.55);
+    --off:#a4514a; --def:#56748f; --oth:#6f8a4a; --spe:#c0913f;   /* muted category colours */
   }
   /* faint paper speckle, reusable */
   .paperbg{background-color:var(--paper);
@@ -71,11 +66,8 @@
     padding:12px;display:flex;flex-direction:column;align-items:center;color:var(--ink);
     box-shadow:2px 3px 0 rgba(43,38,34,.14)}
   /* Display-only puppet: never let the (animated) portrait intercept a click meant for the
-     card's buttons. Belt-and-suspenders — the svg already clips its own hit area.
-     Game-style overlap: the portrait pulls up over the stat panel above and the ability
-     cards below sit under it, so the layers overlap like the in-game screen. */
-  .kcard .portrait{width:150px;height:150px;pointer-events:none;position:relative;z-index:2;
-    margin-top:-10px;margin-bottom:-6px;filter:drop-shadow(1px 2px 1px rgba(36,35,32,.22))}
+     card's buttons. Belt-and-suspenders — the svg already clips its own hit area. */
+  .kcard .portrait{width:150px;height:150px;pointer-events:none}
   /* Name row mirrors the game's banner: class emblem, name, then the ♂/♀ glyph. Both glyphs
      are currentColor art, so they inherit the name's colour. */
   /* Name = a torn-paper ribbon banner. Text/emblems ride ON TOP (crisp); a ::before backing is
@@ -84,8 +76,8 @@
     align-items:center;justify-content:center;gap:6px;color:var(--ink);text-align:center;
     padding:3px 18px;transform:rotate(-1.2deg);isolation:isolate}
   .kcard .kname::before{content:"";position:absolute;inset:-1px -2px;z-index:-1;
-    background:var(--note);border:2.5px solid var(--ink);
-    filter:url(#torn);box-shadow:1px 2px 0 rgba(36,35,32,.18)}
+    background:var(--paper3);border:2.5px solid var(--ink);
+    filter:url(#torn);box-shadow:1px 2px 0 rgba(43,38,34,.16)}
   .single .kname{font-size:19px;padding:4px 22px}
   .kcard .kemblem{width:15px;height:15px;flex:0 0 15px;display:block;opacity:.85}
   .kcard .ksex{width:11px;height:11px;flex:0 0 11px;display:block;opacity:.7}
@@ -140,9 +132,8 @@
   .kcard .kabil-cat{width:15px;height:15px;flex:none;margin-left:auto;align-self:flex-start;margin-top:-1px}
   /* Real multi-colour game art — never tinted, unlike the mono ui-icons glyphs. */
   /* Ability icon sits in a framed WELL, like the game's spellbook card icon slot. */
-  /* Dark icon well like the in-game ability card — the colourful icon reads against black. */
-  .kcard .kabicon{width:28px;height:28px;flex:0 0 28px;display:block;background:var(--card-dark);
-    border:2px solid var(--ink);border-radius:6px 5px 6px 5px/5px 6px 5px 6px;padding:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
+  .kcard .kabicon{width:26px;height:26px;flex:0 0 26px;display:block;background:var(--paper3);
+    border:1.5px solid var(--ink);border-radius:6px 5px 6px 5px/5px 6px 5px 6px;padding:1px;box-shadow:inset 0 0 0 1px rgba(43,38,34,.06)}
   .kcard .kabil-t{min-width:0;flex:1}
   /* Mana cost, mirroring the readout the game puts on each ability card. */
   .kcard .kabil-mp{flex:0 0 auto;align-self:center;font-size:10px;font-weight:800;color:var(--paper3);
@@ -162,8 +153,8 @@
   /* Render disclaimer as a subtle footnote at the card bottom (no frame). */
   .kcard .approx{font-size:9px;color:var(--ink-soft);opacity:.7;padding:2px 6px;margin-top:8px;text-align:center;line-height:1.3;font-style:italic}
   .kcard .kmut{font-size:10.5px;color:var(--ink); background:var(--paper);border:2px solid var(--ink);border-radius:8px 6px 7px 6px/6px 7px 6px 8px;padding:3px 8px;margin-top:6px;line-height:1.5;text-align:center}
-  .kcard .kmut b{color:var(--ink);font-weight:800}
-  .kcard .kmut .mreg{color:var(--ink-soft);font-weight:700}
+  .kcard .kmut b{color:#6b3fa0;font-weight:700}
+  .kcard .kmut .mreg{color:#8a6f2d;font-weight:700}
   .kcard .kmut .unknownmut{color:#a33}
   /* Mutation effect text — hidden on the browse grid (compact), shown only on the single card. */
   .kcard .kmut .mdesc{display:block;color:var(--ink-soft);font-weight:600;font-style:italic;font-size:10px;margin-top:1px}
@@ -174,17 +165,13 @@
   /* Stat block mirrors the in-game cat sheet: the game's own FontIcon_* glyphs
      (ui-icons.js) in two columns — STR/DEX/CON left, INT/SPD/CHA/LCK right — each
      with its value in a paper box. */
-  /* Stat panel = the game's grey rounded panel with a thick black border; two stat columns,
-     each stat an icon + its value on a little white note tag (the in-game base-value slot). */
-  .kcard .kstats{display:flex;gap:14px;margin-top:8px;width:100%;justify-content:center;
-    background:var(--panel);border:2.5px solid var(--ink);border-radius:13px 10px 12px 10px/10px 12px 10px 13px;
-    padding:9px 12px;box-shadow:2px 2px 0 rgba(36,35,32,.14)}
-  .kcard .kstatcol{display:flex;flex-direction:column;gap:4px}
-  .kcard .kstat{display:flex;align-items:center;gap:6px;color:var(--ink)}
-  .kcard .kstat svg{width:16px;height:16px;flex:0 0 16px;display:block}
-  .kcard .kstat .kval{font-size:12px;font-weight:800;color:var(--ink);background:var(--note);
-    border:1.5px solid var(--ink);border-radius:4px;padding:0 6px;min-width:24px;text-align:center;line-height:1.55;
-    box-shadow:1px 1px 0 rgba(36,35,32,.12)}
+  .kcard .kstats{display:flex;gap:10px;margin-top:8px;width:100%;justify-content:center;
+    background:var(--paper);border:2px solid var(--ink);border-radius:11px 9px 10px 9px/9px 10px 9px 11px;padding:7px 9px}
+  .kcard .kstatcol{display:flex;flex-direction:column;gap:3px}
+  .kcard .kstat{display:flex;align-items:center;gap:5px;color:#2b2b2b}
+  .kcard .kstat svg{width:15px;height:15px;flex:0 0 15px;display:block}
+  .kcard .kstat .kval{font-size:11.5px;font-weight:800;color:var(--ink);background:var(--paper3);
+    border:1.5px solid var(--ink);border-radius:5px;padding:0 5px;min-width:23px;text-align:center;line-height:1.5}
   /* Internal-values triplet: [effective][base][modifier], mirroring the in-game sheet.
      The effective box is tinted only when a modifier actually moves it. */
   .kcard .keff{font-size:11.5px;font-weight:700;color:#1b4332;background:#e8f5ec;
