@@ -59,12 +59,21 @@
   .controls input[type="search"]{padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;width:220px}
   .wip{background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:8px;font-size:12px;padding:7px 11px;margin-bottom:12px;line-height:1.5}
   .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
-  .kcard{font-family:var(--hand);background-color:var(--paper3);
-    background-image:radial-gradient(rgba(90,70,40,.045) 1px,transparent 1px);background-size:5px 5px;
-    border:2.5px solid var(--ink);
-    border-radius:16px 11px 15px 12px/12px 15px 11px 16px;   /* hand-drawn wobble */
-    padding:12px;display:flex;flex-direction:column;align-items:center;color:var(--ink);
-    box-shadow:2px 3px 0 rgba(43,38,34,.14)}
+  /* REAL aged-paper texture from ui.swf (bitmap 1, warm-tinted): the hand-drawn torn black
+     edge is the border slice, the paper grain fills the middle (border-image `fill`). One
+     shared image for all 120 cards (cached). drop-shadow follows the torn alpha. */
+  .kcard{font-family:var(--hand);color:var(--ink);position:relative;
+    border:15px solid transparent;
+    border-image:url('kittenshare/tex-paper.png') 54 fill / 15px / 0 stretch;
+    padding:8px 12px 12px;display:flex;flex-direction:column;align-items:center;
+    filter:drop-shadow(2px 3px 1px rgba(43,38,34,.22))}
+  /* Masking-tape strips holding the top corners of the paper to the board, like the game. */
+  .kcard::before,.kcard::after{content:"";position:absolute;top:-7px;width:48px;height:19px;z-index:4;
+    background:linear-gradient(var(--tape),var(--tape)),repeating-linear-gradient(90deg,rgba(255,255,255,.12) 0 3px,rgba(0,0,0,.03) 3px 6px);
+    border-left:1px solid rgba(120,110,80,.25);border-right:1px solid rgba(120,110,80,.25);
+    box-shadow:0 1px 2px rgba(0,0,0,.14)}
+  .kcard::before{left:12px;transform:rotate(-4deg)}
+  .kcard::after{right:12px;transform:rotate(3.5deg)}
   /* Display-only puppet: never let the (animated) portrait intercept a click meant for the
      card's buttons. Belt-and-suspenders — the svg already clips its own hit area. */
   .kcard .portrait{width:150px;height:150px;pointer-events:none}
@@ -215,15 +224,11 @@
   .share-btn:hover{background:#4d6838}
   .share-btn.copied{background:#7a5aa8}
   .single{max-width:420px;margin:0 auto}
-  /* Hero card sits on TORN PAPER: move the paper/border to a ::before backing roughened by the
-     #torn filter so the whole card edge reads hand-torn, while the content stays crisp. Single
-     card only — the filter is skipped on the 120 grid cards to keep their paint cheap. */
-  .single.kcard{position:relative;isolation:isolate;border-color:transparent;background:none;box-shadow:none}
-  .single.kcard::before{content:"";position:absolute;inset:-1px;z-index:-1;
-    background-color:var(--paper3);
-    background-image:radial-gradient(rgba(90,70,40,.045) 1px,transparent 1px);background-size:5px 5px;
-    border:3px solid var(--ink);border-radius:18px 12px 16px 13px/13px 16px 12px 18px;
-    filter:url(#torn);box-shadow:3px 4px 0 rgba(43,38,34,.16)}
+  /* The real paper texture (border-image on .kcard) now provides the torn edge on the hero card
+     too, so the old #torn faux-paper ::before backing is retired. A slightly thicker torn border
+     reads better at hero size. */
+  .single.kcard{position:relative;border-image-width:20px;border-width:20px}
+  .single.kcard::before{display:none}
   .single .portrait{width:260px;height:260px}
   .no-results{text-align:center;color:#999;padding:2rem;font-style:italic}
 </style>
