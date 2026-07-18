@@ -93,6 +93,32 @@
   /* Friendly empty state when filters/search match nothing. */
   .noresult{grid-column:1/-1;font-family:var(--hand);text-align:center;color:var(--ink-soft);
     font-size:15px;font-weight:700;padding:2.2rem 0}
+  /* ⚖ compare toggle next to the ⧉ open button; active = inked-in. */
+  .cmp-btn{position:absolute;top:-6px;right:26px;z-index:7;width:26px;height:26px;
+    font-size:13px;font-weight:800;line-height:1;color:var(--ink);background:var(--paper3);
+    border:2px solid var(--ink);border-radius:7px 5px 6px 5px/5px 6px 5px 7px;cursor:pointer;
+    box-shadow:1px 1px 0 rgba(43,38,34,.2);padding:0}
+  .cmp-btn:hover{background:var(--paper2)}
+  .cmp-btn.on{background:var(--ink);color:var(--paper3)}
+  .comparebar{position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:30;
+    display:flex;gap:8px;background:#f7f3ec;padding:8px 12px;border:2px solid var(--ink);
+    border-radius:12px 9px 11px 9px/9px 11px 9px 12px;box-shadow:2px 3px 0 rgba(43,38,34,.2)}
+  /* Overlay dialogs (compare / analytics): paper panel over a dimmed page. */
+  .overlay{position:fixed;inset:0;z-index:40;background:rgba(43,38,34,.45);
+    display:flex;align-items:flex-start;justify-content:center;padding:4vh 12px;overflow:auto}
+  .overlay-panel{position:relative;font-family:var(--hand);color:var(--ink);max-width:860px;width:100%;
+    border:15px solid transparent;border-image:url('kittenshare/tex-paper.png') 54 fill / 15px / 0 stretch;
+    padding:10px 16px 16px;filter:drop-shadow(3px 4px 2px rgba(0,0,0,.3))}
+  .overlay-close{position:absolute;top:-4px;right:-2px;width:28px;height:28px;font-size:14px;font-weight:800;
+    color:var(--ink);background:var(--paper3);border:2px solid var(--ink);
+    border-radius:7px 5px 6px 5px/5px 6px 5px 7px;cursor:pointer;padding:0;z-index:2}
+  .overlay h2{font-size:19px;margin:2px 0 10px}
+  .overlay h3{font-size:14px;margin:14px 0 4px;color:var(--ink-soft)}
+  .overlay table{border-collapse:collapse;width:100%;font-size:13px}
+  .overlay th,.overlay td{border:1.5px solid var(--ink);padding:3px 8px;text-align:left;background:var(--paper3)}
+  .overlay th{background:var(--paper)}
+  .overlay td.best{background:#e2efdd;font-weight:800}
+  .overlay .dim{color:var(--ink-soft);font-size:12px}
   .controls .tgl{color:var(--ink-soft)}
   /* Accuracy notes as a collapsed paper tag — accurate but debug-flavoured, so opt-in. */
   .wip{font-family:var(--hand);font-size:12.5px;color:var(--ink);background:var(--paper);
@@ -444,14 +470,33 @@
     <label class="tgl" title="Show render/debug notes on each card, e.g. which parts of the portrait are real vs approximated.">
       <input type="checkbox" id="debugInfo" onchange="renderCards()"> debug info
     </label>
-    <select id="sortSel" class="sort-sel" title="Sort the roster" onchange="renderCards()">
+    <label class="tgl" title="Hide cats with any decoded injury — every injury is a permanent stat penalty.">
+      <input type="checkbox" id="hideInjured" onchange="renderCards()"> hide injured
+    </label>
+    <label class="tgl" title="Show only cats with at least one decoded mutation.">
+      <input type="checkbox" id="mutantsOnly" onchange="renderCards()"> mutants only
+    </label>
+    <label class="tgl" title="Show only cats whose FULL gene set (all 14 part frames + fur pattern + coat) is byte-identical to another cat's — true clones. Twins are sorted adjacent.">
+      <input type="checkbox" id="clonesOnly" onchange="renderCards()"> clones only
+    </label>
+    <select id="sortSel" class="sort-sel" title="Sort the roster. Tip: search also takes stat queries like cha>=8 or spd=10." onchange="renderCards()">
       <option value="save">save order</option>
       <option value="name">name A–Z</option>
       <option value="age">oldest first</option>
       <option value="class">by class</option>
-      <option value="stats">highest stats</option>
+      <option value="stats">highest stat total</option>
+      <option value="str">highest STR</option>
+      <option value="dex">highest DEX</option>
+      <option value="con">highest CON</option>
+      <option value="int">highest INT</option>
+      <option value="spd">highest SPD</option>
+      <option value="cha">highest CHA</option>
+      <option value="lck">highest LCK</option>
+      <option value="hp">highest HP</option>
     </select>
     <button class="rand-btn" id="randBtn" title="Open a random kitten from your roster" onclick="openRandomCard()">🎲 random kitten</button>
+    <button class="rand-btn" title="Roster analytics: stat bests, class distribution, mutation and ability censuses" onclick="showAnalytics()">📊 roster stats</button>
+    <button class="rand-btn" title="Download the whole roster (stats, abilities, items, mutations, injuries) as a CSV spreadsheet" onclick="exportCsv()">⬇ CSV</button>
     <span id="cnt" style="font-size:12px;color:#888"></span>
   </div>
   <!-- Class filter: one button per class present in the roster, wearing its real collar art. -->
@@ -459,6 +504,18 @@
   </div>
   <div class="cards" id="cards"></div>
   <button class="totop" id="toTop" title="Back to top" aria-label="Back to top" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</button>
+  <!-- Floating compare tray: appears once 2+ cats are ticked with the ⚖ card button. -->
+  <div class="comparebar" id="compareBar" style="display:none">
+    <button class="cta-btn" onclick="showCompare()">⚖ compare (<span id="cmpN">0</span>)</button>
+    <button class="cta-btn alt" onclick="clearCompare()">clear</button>
+  </div>
+  <!-- Shared overlay host for the compare table and roster analytics. -->
+  <div class="overlay" id="overlay" style="display:none" role="dialog" aria-modal="true">
+    <div class="overlay-panel">
+      <button class="overlay-close" onclick="closeOverlay()" aria-label="Close">✕</button>
+      <div id="overlayBody"></div>
+    </div>
+  </div>
 </div>
 
 <script src="vendor/sql-wasm.js"></script>
@@ -1339,11 +1396,35 @@ function searchHay(c){
     if (info && info.n) parts.push(info.n);
   }
   for (const i of c.items || []) parts.push(i.name || '', i.key || '');
-  for (const m of (c.genes && c.genes.mutations) || []) parts.push(m.name || '');
+  // Mutation names AND their decoded effects ("+2 CHA"), plus injury names — so effect text
+  // and wound hunting work as queries.
+  for (const m of (c.genes && c.genes.mutations) || []) parts.push(m.name || '', m.effect || '');
+  for (const j of c.injuries || []) parts.push(j.name || '');
   return parts.join('\n').toLowerCase();
+}
+// Search grammar: whitespace-separated tokens, ALL must hold. A token shaped like
+// `cha>=8` / `spd=10` / `hp>20` is a STAT PREDICATE on the decoded base stats; anything else
+// is a substring match on the haystack. So `medic cha>=8` = Medics with base CHA ≥ 8.
+const STAT_Q = /^(str|dex|con|int|spd|cha|lck|hp)(>=|<=|=|>|<)(\d+)$/;
+function parseQuery(q){
+  const preds = [], terms = [];
+  for (const tok of q.split(/\s+/).filter(Boolean)) {
+    const m = tok.match(STAT_Q);
+    if (m) {
+      const [, k, op, nStr] = m; const n = +nStr;
+      preds.push(c => {
+        const v = c.stats && c.stats[k];
+        if (v == null) return false;                    // undecoded never satisfies a predicate
+        return op === '>=' ? v >= n : op === '<=' ? v <= n : op === '>' ? v > n : op === '<' ? v < n : v === n;
+      });
+    } else terms.push(tok);
+  }
+  return { preds, terms };
 }
 function sortCats(cats, mode){
   const by = f => cats.slice().sort((a, b) => f(a) - f(b) || String(a.name).localeCompare(String(b.name)));
+  if (['str','dex','con','int','spd','cha','lck','hp'].includes(mode))
+    return by(c => -((c.stats && c.stats[mode]) ?? -1));   // undecoded sorts last
   switch (mode) {
     case 'name': return cats.slice().sort((a, b) => String(a.name).localeCompare(String(b.name)));
     case 'age':  return by(c => -(catAge(c.birthDay, CURRENT_DAY, c.deathDay) ?? -1));
@@ -1351,6 +1432,14 @@ function sortCats(cats, mode){
     case 'stats': return by(c => { const s = c.stats; return s ? -(s.str+s.dex+s.con+s.int+s.spd+s.cha+s.lck) : 1; });
     default: return cats;             // save order
   }
+}
+// Full gene signature — all 14 part frames + fur pattern + coat palette. Two cats sharing it
+// are true clones (genes byte-identical); memoized per cat.
+function geneSig(c){
+  if (c.__sig !== undefined) return c.__sig;
+  const g = c.genes;
+  c.__sig = (g && g.slots) ? JSON.stringify([g.slots, g.pattern, g.coatPalette]) : null;
+  return c.__sig;
 }
 // Class filter row — one paper chip per class PRESENT in the roster, wearing its real collar
 // art, ordered by head-count. Click to filter, click again (or "all") to clear.
@@ -1389,16 +1478,29 @@ function renderCards(keepLimit){
   const srch = document.getElementById('srch');
   const q = (srch.value||'').toLowerCase();
   srch.parentElement.classList.toggle('hasq', q.length > 0);   // shows the ✕ clear button
-  const hb = document.getElementById('houseOnly');
-  const houseOnly = !!(hb && hb.checked);
-  const dd = document.getElementById('hideDead');
-  const hideDead = !!(dd && dd.checked);
+  const on = id => { const cb = document.getElementById(id); return !!(cb && cb.checked); };
+  const houseOnly = on('houseOnly'), hideDead = on('hideDead'),
+        hideInjured = on('hideInjured'), mutantsOnly = on('mutantsOnly'), clonesOnly = on('clonesOnly');
+  const { preds, terms } = parseQuery(q);
+  // Clone census: gene-signature counts across the whole roster (cheap; memoized sigs).
+  let sigCount = null;
+  if (clonesOnly) {
+    sigCount = new Map();
+    for (const c of allCats) { const s = geneSig(c); if (s) sigCount.set(s, (sigCount.get(s) || 0) + 1); }
+  }
   let cats = allCats.filter(c =>
     (!houseOnly || !!c.room) &&
     (!hideDead || c.status !== 'dead') &&
+    (!hideInjured || !(c.injuries && c.injuries.length)) &&
+    (!mutantsOnly || !!(c.genes && c.genes.mutations && c.genes.mutations.length)) &&
+    (!clonesOnly || (sigCount.get(geneSig(c)) || 0) >= 2) &&
     (!__classFilter || c.cls === __classFilter) &&
-    (!q || searchHay(c).includes(q)));
+    preds.every(p => p(c)) &&
+    (!terms.length || terms.every(t => searchHay(c).includes(t))));
   cats = sortCats(cats, (document.getElementById('sortSel')||{}).value);
+  // Clones view groups twins adjacent regardless of the sort — the whole point is seeing them
+  // side by side.
+  if (clonesOnly) cats = cats.slice().sort((a, b) => String(geneSig(a)).localeCompare(String(geneSig(b))) || String(a.name).localeCompare(String(b.name)));
   document.getElementById('cnt').textContent = `Showing ${Math.min(cats.length, __showLimit)} of ${cats.length}`;
   const el = document.getElementById('cards');
   if (!cats.length && allCats.length) {
@@ -1421,7 +1523,7 @@ function clearSearch(){
 }
 function resetFilters(){
   const s = document.getElementById('srch'); if (s) s.value = '';
-  for (const id of ['houseOnly', 'hideDead']) { const cb = document.getElementById(id); if (cb) cb.checked = false; }
+  for (const id of ['houseOnly', 'hideDead', 'hideInjured', 'mutantsOnly', 'clonesOnly']) { const cb = document.getElementById(id); if (cb) cb.checked = false; }
   __classFilter = null;
   document.querySelectorAll('#classBtns .class-btn').forEach(x => x.classList.toggle('active', !x.dataset.cls));
   renderCards();
@@ -1858,7 +1960,8 @@ function kittenCard(c, big){
   // the grid tab keeps the loaded save). The card body itself is not clickable — text selection
   // and stray clicks stay inert. The button is natively focusable, so keyboard access rides it.
   const openBtn = (!big && c.key != null)
-    ? `<button class="opencard-btn" data-key="${esc(String(c.key))}" title="open ${esc(c.name)}'s card in a new tab" aria-label="open ${esc(c.name)}'s card in a new tab">⧉</button>`
+    ? `<button class="opencard-btn" data-key="${esc(String(c.key))}" title="open ${esc(c.name)}'s card in a new tab" aria-label="open ${esc(c.name)}'s card in a new tab">⧉</button>` +
+      `<button class="cmp-btn${__compareSet.has(c.key) ? ' on' : ''}" data-key="${esc(String(c.key))}" title="pick ${esc(c.name)} for side-by-side compare (up to 3)" aria-label="compare ${esc(c.name)}">⚖</button>`
     : '';
   return `<div class="kcard${big?' single':''}">
     ${openBtn}
@@ -2114,9 +2217,121 @@ async function tryShareView(){
 document.getElementById('cards').addEventListener('click', e => {
   const ob = e.target.closest('.opencard-btn');
   if (ob) { openCard(Number(ob.dataset.key)); return; }
+  const cb = e.target.closest('.cmp-btn');
+  if (cb) { toggleCompare(Number(cb.dataset.key), cb); return; }
   const b = e.target.closest('.share-btn');
   if (b) share(Number(b.dataset.key), b);
 });
+// ---------- min-max tools: compare / analytics / CSV (decoded data only) ----------
+const __compareSet = new Set();
+function toggleCompare(key, btn){
+  if (__compareSet.has(key)) __compareSet.delete(key);
+  else {
+    if (__compareSet.size >= 3) return;      // hard cap; the table is 3 columns max
+    __compareSet.add(key);
+  }
+  btn.classList.toggle('on', __compareSet.has(key));
+  const bar = document.getElementById('compareBar');
+  document.getElementById('cmpN').textContent = __compareSet.size;
+  bar.style.display = __compareSet.size >= 2 ? 'flex' : 'none';
+}
+function clearCompare(){
+  __compareSet.clear();
+  document.getElementById('compareBar').style.display = 'none';
+  document.querySelectorAll('#cards .cmp-btn.on').forEach(b => b.classList.remove('on'));
+}
+function openOverlay(html){
+  document.getElementById('overlayBody').innerHTML = html;
+  document.getElementById('overlay').style.display = 'flex';
+}
+function closeOverlay(){ document.getElementById('overlay').style.display = 'none'; }
+const STAT_KEYS = ['str','dex','con','int','spd','cha','lck'];
+// Side-by-side compare table: base stats (best per row highlighted), then the list sections.
+// Base values only — the same honesty rule as the cards (level bonuses aren't decoded).
+function showCompare(){
+  const cats = [...__compareSet].map(k => allCats.find(c => c.key === k)).filter(Boolean);
+  if (cats.length < 2) return;
+  const head = `<tr><th></th>${cats.map(c => `<th>${esc(c.name)}<div class="dim">${esc(c.cls||'—')}</div></th>`).join('')}</tr>`;
+  const statRow = k => {
+    const vals = cats.map(c => c.stats ? c.stats[k] : null);
+    const known = vals.filter(v => v != null);
+    const best = known.length ? Math.max(...known) : null;
+    return `<tr><th>${esc(STAT_LABEL[k] || k.toUpperCase())}</th>` +
+      vals.map(v => `<td${v != null && v === best && known.length > 1 ? ' class="best"' : ''}>${v == null ? '—' : esc(String(v))}</td>`).join('') + '</tr>';
+  };
+  const listRow = (label, get) => `<tr><th>${label}</th>` +
+    cats.map(c => `<td>${(get(c) || []).map(esc).join('<br>') || '<span class="dim">—</span>'}</td>`).join('') + '</tr>';
+  const total = c => c.stats ? STAT_KEYS.reduce((a, k) => a + (c.stats[k] || 0), 0) : null;
+  const totals = cats.map(total); const knownT = totals.filter(v => v != null);
+  const bestT = knownT.length ? Math.max(...knownT) : null;
+  openOverlay(`<h2>⚖ compare</h2><table>${head}
+    ${STAT_KEYS.map(statRow).join('')}
+    <tr><th>total</th>${totals.map(v => `<td${v != null && v === bestT && knownT.length > 1 ? ' class="best"' : ''}><b>${v == null ? '—' : esc(String(v))}</b></td>`).join('')}</tr>
+    ${statRow('hp')}
+    ${listRow('age', c => { const a = catAge(c.birthDay, CURRENT_DAY, c.deathDay) ?? c.age; return a == null ? [] : [String(a)]; })}
+    ${listRow('abilities', c => (c.abilities || []).map(a => (typeof ABILITY_INFO !== 'undefined' && ABILITY_INFO[a] && ABILITY_INFO[a].n) || a))}
+    ${listRow('items', c => (c.items || []).map(i => i.name))}
+    ${listRow('mutations', c => ((c.genes && c.genes.mutations) || []).map(m => m.name + (m.effect ? ` (${m.effect})` : '')))}
+    ${listRow('injuries', c => (c.injuries || []).map(j => j.name + (j.count > 1 ? ` ×${j.count}` : '')))}
+  </table><div class="dim" style="margin-top:8px">base stats only — level bonuses aren't decoded, so in-game effective values can differ</div>`);
+}
+// Roster analytics: censuses over the DECODED fields of the whole roster.
+function showAnalytics(){
+  if (!allCats.length) return;
+  const total = allCats.length;
+  const inHouse = allCats.filter(c => c.room).length;
+  const dead = allCats.filter(c => c.status === 'dead').length;
+  const injured = allCats.filter(c => c.injuries && c.injuries.length).length;
+  const mutants = allCats.filter(c => c.genes && c.genes.mutations && c.genes.mutations.length).length;
+  const sigCount = new Map();
+  for (const c of allCats) { const s = geneSig(c); if (s) sigCount.set(s, (sigCount.get(s) || 0) + 1); }
+  const cloneCats = allCats.filter(c => (sigCount.get(geneSig(c)) || 0) >= 2).length;
+  const bests = STAT_KEYS.concat(['hp']).map(k => {
+    let best = null;
+    for (const c of allCats) { const v = c.stats && c.stats[k]; if (v != null && (best == null || v > best)) best = v; }
+    if (best == null) return `<tr><th>${esc(STAT_LABEL[k] || k.toUpperCase())}</th><td class="dim">not decoded</td></tr>`;
+    const names = allCats.filter(c => c.stats && c.stats[k] === best).map(c => c.name);
+    return `<tr><th>${esc(STAT_LABEL[k] || k.toUpperCase())}</th><td><b>${best}</b> — ${names.slice(0, 4).map(esc).join(', ')}${names.length > 4 ? ` +${names.length - 4} more` : ''}</td></tr>`;
+  }).join('');
+  const census = (get, n) => {
+    const m = new Map();
+    for (const c of allCats) for (const v of get(c) || []) if (v) m.set(v, (m.get(v) || 0) + 1);
+    return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, n)
+      .map(([v, ct]) => `<tr><td>${esc(v)}</td><td><b>${ct}</b></td></tr>`).join('') || '<tr><td class="dim" colspan="2">none</td></tr>';
+  };
+  const classes = census(c => c.cls ? [c.cls] : [], 14);
+  const muts = census(c => ((c.genes && c.genes.mutations) || []).map(m => m.name), 10);
+  const abils = census(c => (c.abilities || []).map(a => (typeof ABILITY_INFO !== 'undefined' && ABILITY_INFO[a] && ABILITY_INFO[a].n) || a), 10);
+  openOverlay(`<h2>📊 roster stats</h2>
+    <div>${total} cats · ${inHouse} in the house · ${dead} dead · ${injured} injured · ${mutants} mutants · ${cloneCats} in clone groups</div>
+    <h3>best base stat in the roster</h3><table>${bests}</table>
+    <h3>classes</h3><table>${classes}</table>
+    <h3>top 10 mutations</h3><table>${muts}</table>
+    <h3>top 10 abilities</h3><table>${abils}</table>
+    <div class="dim" style="margin-top:8px">everything above is counted from decoded save data only</div>`);
+}
+// CSV export of the whole roster (not just the filtered view — spreadsheets filter better).
+function exportCsv(){
+  if (!allCats.length) return;
+  const cell = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+  const rows = [['name','class','gender','age','dead','room','str','dex','con','int','spd','cha','lck','hp','abilities','items','mutations','injuries'].map(cell).join(',')];
+  for (const c of allCats) {
+    const s = c.stats || {};
+    rows.push([c.name, c.cls, c.gender, catAge(c.birthDay, CURRENT_DAY, c.deathDay) ?? '',
+      c.status === 'dead' ? 'yes' : '', c.room || '',
+      s.str, s.dex, s.con, s.int, s.spd, s.cha, s.lck, s.hp,
+      (c.abilities || []).map(a => (typeof ABILITY_INFO !== 'undefined' && ABILITY_INFO[a] && ABILITY_INFO[a].n) || a).join('; '),
+      (c.items || []).map(i => i.name).join('; '),
+      ((c.genes && c.genes.mutations) || []).map(m => m.name).join('; '),
+      (c.injuries || []).map(j => j.name + (j.count > 1 ? ` x${j.count}` : '')).join('; ')
+    ].map(cell).join(','));
+  }
+  const a = document.createElement('a');
+  a.download = 'kittenshare-roster.csv';
+  a.href = URL.createObjectURL(new Blob(['﻿' + rows.join('\r\n')], { type: 'text/csv' }));
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
 // Solo-card open: mint the cat's share blob and open it in a NEW TAB. The grid tab keeps the
 // loaded save untouched — the earlier in-page swap lost the roster to any reload on the hero
 // view (Back then forced re-opening the save file), so the solo view now always gets its own
@@ -2164,8 +2379,11 @@ document.addEventListener('keydown', e => {
   const inField = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName);
   const srch = document.getElementById('srch');
   if (e.key === '/' && !inField && srch && srch.offsetParent) { e.preventDefault(); srch.focus(); }
+  else if (e.key === 'Escape' && document.getElementById('overlay').style.display !== 'none') { closeOverlay(); }
   else if (e.key === 'Escape' && document.activeElement === srch && srch.value) { clearSearch(); }
 });
+// Clicking the dimmed backdrop (not the paper panel) also closes the dialog.
+document.getElementById('overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeOverlay(); });
 // Back-to-top appears only after real scrolling (piggybacks the existing passive listener zone).
 addEventListener('scroll', () => {
   const b = document.getElementById('toTop');
