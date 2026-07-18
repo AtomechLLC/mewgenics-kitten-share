@@ -158,8 +158,12 @@
      emoji inside and the name beneath. */
   .kcard .kitemgrid{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;margin-top:6px}
   .kcard .kislot{width:54px;text-align:center}
-  .kcard .kislot .kibox{position:relative;width:44px;height:44px;margin:0 auto}
-  .kcard .kislot .kibox svg{width:44px;height:44px;display:block}
+  /* Real inventory-slot box from ui.swf (bitmap 112, warm-tinted): hand-drawn border as the
+     border-image slice, paper fill in the middle. */
+  .kcard .kislot .kibox{position:relative;width:44px;height:44px;margin:0 auto;
+    border:7px solid transparent;
+    border-image:url('kittenshare/tex-itemslot.png') 34 fill / 7px / 0 stretch}
+  .kcard .kislot .kibox svg{width:100%;height:100%;display:block}
   .kcard .kislot .kiimg{position:absolute;inset:0;margin:auto;width:62%;height:62%;object-fit:contain;image-rendering:auto}
   .kcard .kislot .kiemoji{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:19px;line-height:1}
   .kcard .kislot .kiname{font-size:9px;font-weight:700;color:var(--ink);line-height:1.15;margin-top:1px;
@@ -1569,13 +1573,10 @@ function itemBlock(c){
     const cells = its.map(i => `<span>${ITEM_KIND_ICON[i.kind] || '•'} <b>${esc(i.name)}</b> <span class="islot">${esc(i.kind)}</span></span>`).join(' · ');
     return `<div class="kitem">🎒 ${cells}</div>`;
   }
-  ensureUiDefs();   // inject the 69 KB frame ONCE as a <symbol>; slots reference it via <use>
-  // NOTE the viewBox here is NOT the symbol's. A <symbol> carries its own viewBox, so <use>
-  // re-maps the art into the use viewport starting at (0,0) — reusing the symbol's own
-  // "-70 -58 …" box shoved the frame into the bottom-right quadrant and clipped it. Give the
-  // outer svg a 0-origin box the same SIZE as the symbol's, and size the <use> to fill it.
-  const frame = `<svg viewBox="0 0 140 116" preserveAspectRatio="xMidYMid meet" aria-hidden="true">` +
-    `<use href="#ui-itembox" width="140" height="116"/></svg>`;
+  // The slot box is now the real INVENTORY SLOT texture (tex-itemslot.png) applied as a CSS
+  // border-image on .kibox — no SVG frame needed. (The ornate ui_fla.itemboxbg_681 we used
+  // before is the game's SET BONUS frame, not an item slot.)
+  const frame = '';
   const cells = its.map(i => {
     // Real item icon (item-icons.js maps the blob's item key -> the vendored icon). The per-slot
     // emoji is only a FALLBACK for the ~4% of items with no wiki record — never a wrong icon.
