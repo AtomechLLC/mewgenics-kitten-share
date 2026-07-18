@@ -63,7 +63,18 @@
   .hint{font-size:11.5px;color:#999;margin:-6px 0 12px}
   code{background:#efe9dd;padding:1px 5px;border-radius:4px;font-size:12px}
   #status{font-family:var(--hand);font-size:14px;font-weight:700;color:var(--ink-soft);padding:6px 0;min-height:18px}
-  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+  /* Toolbar: two structured rows (find/sort/actions, then labelled filter/view groups)
+     instead of one long wrapping soup of controls. openSave sets display:flex — the column
+     direction turns that into stacked rows. */
+  .controls{display:flex;flex-direction:column;gap:7px;margin-bottom:8px}
+  .ctlrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap;width:100%}
+  .ctlspacer{flex:1}
+  /* A labelled paper group of related toggles. */
+  .ctlgroup{display:inline-flex;flex-wrap:wrap;gap:10px;align-items:center;
+    background:var(--paper3);border:1.5px dashed rgba(43,38,34,.4);border-radius:10px;
+    padding:3px 10px}
+  .ctlname{font-family:var(--hand);font-size:10.5px;font-weight:800;color:var(--ink-soft);
+    text-transform:uppercase;letter-spacing:.05em}
   /* Scoped to the search box: a bare `.controls input` also hit the internals checkbox,
      stretching it to 220px and shoving its label far to the right. */
   .controls input[type="search"]{font-family:var(--hand);font-weight:700;color:var(--ink);
@@ -477,55 +488,66 @@
   <!-- Sticky toolbar: search/sort/filters stay reachable however deep the grid scrolls. -->
   <div class="stickybar" id="stickybar">
   <div class="controls" id="controls" style="display:none">
-    <span class="srchwrap">
-      <input type="search" id="srch" placeholder="Search kittens…  ( / )" oninput="renderCards()"
-        aria-label="Search kittens by name, class, ability, item or mutation">
-      <button class="srchclear" id="srchClear" title="Clear search (Esc)" aria-label="Clear search" onclick="clearSearch()">✕</button>
-    </span>
-    <button class="srchhelp" title="Search syntax help" aria-label="Search syntax help" onclick="showSearchHelp()">?</button>
-    <label class="tgl" id="houseTgl" style="display:none" title="Show only the cats currently living in your house. The save's cat table holds every cat that ever existed — ancestors, the dead, the long gone — so this filters to the roster in house_state.">
-      <input type="checkbox" id="houseOnly" onchange="renderCards()"> in the house only
-    </label>
-    <label class="tgl" title="Hide cats with a death-day stamp in the save. Only DECODED deaths are hidden — other gone-from-the-house states (donated, retired…) aren't locatable yet, so those cats stay visible.">
-      <input type="checkbox" id="hideDead" onchange="renderCards()"> hide dead
-    </label>
-    <label class="tgl" title="Shorter cards: hides abilities, items, mutations and injuries so far more kittens fit on screen. The full details are one ⧉ away.">
-      <input type="checkbox" id="compactCards" onchange="document.getElementById('cards').classList.toggle('compact', this.checked); saveViewSettings()"> compact
-    </label>
-    <label class="tgl" title="Show the game's [effective | base | modifier] stat triplet. The modifier is reconstructed from the sources we decode (mutations + equipped items) — it is PARTIAL and will disagree with in-game wherever level or trait bonuses apply.">
-      <input type="checkbox" id="detailedStats" onchange="renderCards()"> detailed stats
-    </label>
-    <label class="tgl" title="Show render/debug notes on each card, e.g. which parts of the portrait are real vs approximated.">
-      <input type="checkbox" id="debugInfo" onchange="renderCards()"> debug info
-    </label>
-    <label class="tgl" title="Hide cats with any decoded injury — every injury is a permanent stat penalty.">
-      <input type="checkbox" id="hideInjured" onchange="renderCards()"> hide injured
-    </label>
-    <label class="tgl" title="Show only cats with at least one decoded mutation.">
-      <input type="checkbox" id="mutantsOnly" onchange="renderCards()"> mutants only
-    </label>
-    <label class="tgl" title="Show only cats whose FULL gene set (all 14 part frames + fur pattern + coat) is byte-identical to another cat's — true clones. Twins are sorted adjacent.">
-      <input type="checkbox" id="clonesOnly" onchange="renderCards()"> clones only
-    </label>
-    <select id="sortSel" class="sort-sel" title="Sort the roster. Tip: search also takes stat queries like cha>=8 or spd=10." onchange="renderCards()">
-      <option value="save">save order</option>
-      <option value="name">name A–Z</option>
-      <option value="age">oldest first</option>
-      <option value="class">by class</option>
-      <option value="stats">highest stat total</option>
-      <option value="str">highest STR</option>
-      <option value="dex">highest DEX</option>
-      <option value="con">highest CON</option>
-      <option value="int">highest INT</option>
-      <option value="spd">highest SPD</option>
-      <option value="cha">highest CHA</option>
-      <option value="lck">highest LCK</option>
-      <option value="hp">highest HP</option>
-    </select>
-    <button class="rand-btn" id="randBtn" title="Open a random kitten from your roster" onclick="openRandomCard()">🎲 random kitten</button>
-    <button class="rand-btn" title="Roster analytics: stat bests, class distribution, mutation and ability censuses" onclick="showAnalytics()">📊 roster stats</button>
-    <button class="rand-btn" title="Download the whole roster (stats, abilities, items, mutations, injuries) as a CSV spreadsheet" onclick="exportCsv()">⬇ CSV</button>
-    <span id="cnt" style="font-size:12px;color:#888"></span>
+    <!-- Row 1: find + sort + actions. -->
+    <div class="ctlrow">
+      <span class="srchwrap">
+        <input type="search" id="srch" placeholder="Search kittens…  ( / )" oninput="renderCards()"
+          aria-label="Search kittens by name, class, ability, item or mutation">
+        <button class="srchclear" id="srchClear" title="Clear search (Esc)" aria-label="Clear search" onclick="clearSearch()">✕</button>
+      </span>
+      <button class="srchhelp" title="Search syntax help" aria-label="Search syntax help" onclick="showSearchHelp()">?</button>
+      <select id="sortSel" class="sort-sel" title="Sort the roster. Tip: search also takes stat queries like cha>=8 or spd=10." onchange="renderCards()">
+        <option value="save">save order</option>
+        <option value="name">name A–Z</option>
+        <option value="age">oldest first</option>
+        <option value="class">by class</option>
+        <option value="stats">highest stat total</option>
+        <option value="str">highest STR</option>
+        <option value="dex">highest DEX</option>
+        <option value="con">highest CON</option>
+        <option value="int">highest INT</option>
+        <option value="spd">highest SPD</option>
+        <option value="cha">highest CHA</option>
+        <option value="lck">highest LCK</option>
+        <option value="hp">highest HP</option>
+      </select>
+      <span class="ctlspacer"></span>
+      <button class="rand-btn" id="randBtn" title="Open a random kitten from your roster" onclick="openRandomCard()">🎲 random</button>
+      <button class="rand-btn" title="Roster analytics: stat bests, class distribution, mutation and ability censuses" onclick="showAnalytics()">📊 stats</button>
+      <button class="rand-btn" title="Download the whole roster (stats, abilities, items, mutations, injuries) as a CSV spreadsheet" onclick="exportCsv()">⬇ CSV</button>
+    </div>
+    <!-- Row 2: labelled toggle groups — roster FILTERS vs card VIEW options. -->
+    <div class="ctlrow">
+      <span class="ctlgroup"><span class="ctlname">filter</span>
+        <label class="tgl" id="houseTgl" style="display:none" title="Show only the cats currently living in your house. The save's cat table holds every cat that ever existed — ancestors, the dead, the long gone — so this filters to the roster in house_state.">
+          <input type="checkbox" id="houseOnly" onchange="renderCards()"> in house
+        </label>
+        <label class="tgl" title="Hide cats with a death-day stamp in the save. Only DECODED deaths are hidden — other gone-from-the-house states (donated, retired…) aren't locatable yet, so those cats stay visible.">
+          <input type="checkbox" id="hideDead" onchange="renderCards()"> hide dead
+        </label>
+        <label class="tgl" title="Hide cats with any decoded injury — every injury is a permanent stat penalty.">
+          <input type="checkbox" id="hideInjured" onchange="renderCards()"> hide injured
+        </label>
+        <label class="tgl" title="Show only cats with at least one decoded mutation.">
+          <input type="checkbox" id="mutantsOnly" onchange="renderCards()"> mutants
+        </label>
+        <label class="tgl" title="Show only cats whose FULL gene set (all 14 part frames + fur pattern + coat) is byte-identical to another cat's — true clones. Twins are sorted adjacent.">
+          <input type="checkbox" id="clonesOnly" onchange="renderCards()"> clones
+        </label>
+      </span>
+      <span class="ctlgroup"><span class="ctlname">view</span>
+        <label class="tgl" title="Shorter cards: hides abilities, items, mutations and injuries so far more kittens fit on screen. The full details are one ⧉ away.">
+          <input type="checkbox" id="compactCards" onchange="document.getElementById('cards').classList.toggle('compact', this.checked); saveViewSettings()"> compact
+        </label>
+        <label class="tgl" title="Show the game's [effective | base | modifier] stat triplet. The modifier is reconstructed from the sources we decode (mutations + equipped items) — it is PARTIAL and will disagree with in-game wherever level or trait bonuses apply.">
+          <input type="checkbox" id="detailedStats" onchange="renderCards()"> detailed
+        </label>
+        <label class="tgl" title="Show render/debug notes on each card, e.g. which parts of the portrait are real vs approximated.">
+          <input type="checkbox" id="debugInfo" onchange="renderCards()"> debug
+        </label>
+      </span>
+      <span id="cnt" style="font-size:12px;color:#888;margin-left:auto"></span>
+    </div>
   </div>
   <!-- Class filter: one button per class present in the roster, wearing its real collar art. -->
   <div class="classbar" id="classBtns" style="display:none"></div>
