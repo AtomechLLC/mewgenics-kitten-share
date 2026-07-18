@@ -330,6 +330,13 @@
   .class-btn.active{background:var(--ink);color:var(--paper3)}
   /* "show more" bar spans the whole grid row. */
   .morebar{grid-column:1/-1;text-align:center;padding:14px 0}
+  .cta-btn.alt{background:var(--paper);color:var(--ink)}
+  .cta-btn.alt:hover{background:var(--paper2)}
+  /* Keyboard support: a visible focus ring on every interactive element (cards included —
+     they're focusable buttons now), only for keyboard focus so mouse clicks stay clean. */
+  .kcard:focus-visible,.share-btn:focus-visible,.cta-btn:focus-visible,.rand-btn:focus-visible,
+  .class-btn:focus-visible,.sort-sel:focus-visible,.discord:focus-visible,
+  .controls input:focus-visible{outline:3px solid #4d6838;outline-offset:2px}
   .single{max-width:420px;margin:0 auto}
   /* The real paper texture (border-image on .kcard) now provides the torn edge on the hero card
      too, so the old #torn faux-paper ::before backing is retired. A slightly thicker torn border
@@ -1779,8 +1786,10 @@ function kittenCard(c, big){
   const metaGender = (c.gender && !genderIcon(c.gender)) ? esc(c.gender) : '';
   const metaLead = [metaClass, metaGender].filter(Boolean).join(' · ');
   // data-key makes grid cards clickable (open the hero view); same validated-integer rule as
-  // the share button — the raw key never reaches the DOM unvalidated.
-  return `<div class="kcard${big?' single':''}"${!big && c.key != null ? ` data-key="${esc(String(c.key))}"` : ''}>
+  // the share button — the raw key never reaches the DOM unvalidated. tabindex/role make the
+  // card keyboard-activatable (Enter/Space handled by the #cards listener).
+  const clickable = !big && c.key != null;
+  return `<div class="kcard${big?' single':''}"${clickable ? ` data-key="${esc(String(c.key))}" tabindex="0" role="button" aria-label="open ${esc(c.name)}'s card"` : ''}>
     ${classDogtag(c)}
     <div class="kname"><span>${esc(c.name)}</span>${genderIcon(c.gender)}</div>
     <div class="kmeta">${metaLead}${ageText(c)}</div>
@@ -1811,10 +1820,11 @@ function kittenCard(c, big){
 // gets a Back button that restores the browse grid in place; a RECIPIENT (no save) gets the
 // conversion CTA. Both are paper buttons, not bare text links.
 function shareCTA(){
+  const dl = `<button class="cta-btn alt" onclick="downloadPortraitPng()" title="Save this kitten's portrait as a 1024px PNG">⬇ portrait PNG</button>`;
   if (allCats.length) {
-    return `<p class="ctarow"><button class="cta-btn" onclick="history.back()">← back to your kittens</button></p>`;
+    return `<p class="ctarow"><button class="cta-btn" onclick="history.back()">← back to your kittens</button> ${dl}</p>`;
   }
-  return `<p class="ctarow"><a class="cta-btn" href="${location.pathname}">Open your own save →</a></p>`;
+  return `<p class="ctarow"><a class="cta-btn" href="${location.pathname}">Open your own save →</a> ${dl}</p>`;
 }
 function showShareView(html){
   document.getElementById('openView').style.display = 'none';
@@ -1914,15 +1924,52 @@ function share(key, btn){
     flashBtn(btn, '⚠ Copy failed', 2200);
     window.prompt('Copy this share link:', url);
   };
+  const copyPath = () => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(onOk, onFail);
+      } else if (legacyCopy(url)) {
+        onOk();
+      } else {
+        onFail();
+      }
+    } catch (e) { onFail(); }
+  };
+  // On touch devices the native share sheet beats a silent copy (Discord/Messages/etc. are one
+  // tap away). A dismissed sheet (AbortError) restores quietly; any real failure falls back to
+  // the copy path so the button still never looks dead.
+  if (navigator.share && window.matchMedia && matchMedia('(pointer: coarse)').matches) {
+    navigator.share({ title: `${c.name} — KittenShare`, url })
+      .then(() => flashBtn(btn, '✅ Shared!', 1600))
+      .catch(err => { if (!err || err.name !== 'AbortError') copyPath(); });
+    return;
+  }
+  copyPath();
+}
+// ⬇ Rasterize the hero card's PORTRAIT to a PNG download. The puppet SVG is fully inline
+// (paths/gradients/masks, no external refs), so serialize -> Image -> canvas works offline.
+// Portrait only — the full HTML card (border-images, webp icons) can't be rasterized
+// client-side without a rendering library, and a wrong-looking card beats no card never.
+async function downloadPortraitPng(){
+  const svg = document.querySelector('#shareView .portrait svg, #demoView .portrait svg');
+  if (!svg) return;
+  const name = (document.querySelector('#shareView .kname span, #demoView .kname span')?.textContent || 'kitten').trim();
   try {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(url).then(onOk, onFail);
-    } else if (legacyCopy(url)) {
-      onOk();
-    } else {
-      onFail();
-    }
-  } catch (e) { onFail(); }
+    const clone = svg.cloneNode(true);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    clone.setAttribute('width', '1024'); clone.setAttribute('height', '1024');
+    const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml' }));
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+    const canvas = document.createElement('canvas');
+    canvas.width = 1024; canvas.height = 1024;
+    canvas.getContext('2d').drawImage(img, 0, 0, 1024, 1024);
+    URL.revokeObjectURL(url);
+    const a = document.createElement('a');
+    a.download = (name.replace(/[^\w-]+/g, '_') || 'kitten') + '.png';
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+  } catch (e) { /* tainted/serialize failure -> no download, never a corrupt file */ }
 }
 async function tryShareView(){
   // lz-string's compressToEncodedURIComponent emits exactly [A-Za-z0-9+-$] (its
@@ -1979,6 +2026,12 @@ document.getElementById('cards').addEventListener('click', e => {
   // recipient would see (same encode->decode path), so what you preview IS what you share.
   const card = e.target.closest('.kcard');
   if (card && card.dataset.key != null) openCard(Number(card.dataset.key));
+});
+// Keyboard path for the focusable cards (Enter/Space = open, like any button).
+document.getElementById('cards').addEventListener('keydown', e => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const card = e.target.closest('.kcard');
+  if (card && card.dataset.key != null) { e.preventDefault(); openCard(Number(card.dataset.key)); }
 });
 // In-page card open: mint the cat's share blob, put it in the hash (a real history entry, so
 // the browser Back button returns to the grid), and render WITHOUT reloading — a reload would
