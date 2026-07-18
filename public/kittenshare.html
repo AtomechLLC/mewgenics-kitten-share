@@ -297,6 +297,11 @@ var CAT_PARTS = {}, HEAD_SOCKETS = {}, CAT_TEXTURES = {}, ITEM_SPRITES = {};
 // INJURY scar overlays (kittenshare/scars.js). Same merge pattern; empty until loadMonolith
 // fills it, so renderPortrait must tolerate a miss (a cat then renders with no scar art).
 var CAT_SCARS = {};
+// The Phase 5 scar overlay is currently DISABLED: on heavily-injured cats it renders unmasked
+// (the scar sprite isn't clipped to the part silhouette, so leg/body scars read as misplaced
+// plank-like blobs — see Smithers). Injuries still list in the text block; the portrait just
+// shows no scar decal until placement+masking is redone properly. Flip to true to re-enable.
+var SCAR_OVERLAY = false;
 // Ability display names + real icon art (lazy, see loadMonolith). Empty until then, so every
 // reader must tolerate a miss and fall back to the raw decoded id.
 // The icons are a uniform sheet, so ONE viewBox fits them all; the asset ships the measured
@@ -674,6 +679,7 @@ function renderPortrait(cat){
   // inside the part): black outlines/dark-red wounds/green glow pass through, gray shading tints.
   const scarPlan = buildScarPlan(cat);
   function scarSvg(target){
+    if (!SCAR_OVERLAY) return '';
     const pl = scarPlan[target]; if (!pl) return '';
     if (typeof CAT_SCARS === 'undefined' || !CAT_SCARS[pl.art] || !CAT_SCARS.place) return '';
     const f = CAT_SCARS[pl.art][pl.R]; if (!f) return '';
@@ -1428,7 +1434,7 @@ function injuryBlock(c){
       .join(' ');
     return `<b>${esc(i.name)}</b>${n}${pen ? ` <span class="ipen">${esc(pen)}</span>` : ''}`;
   }).join(' · ');
-  return `<div class="kinj" title="Permanent injuries from adventures — each a stat penalty and (for most) a scar shown on the portrait.">🩹 ${items}</div>`;
+  return `<div class="kinj" title="Permanent injuries from adventures — each is a permanent stat penalty.">🩹 ${items}</div>`;
 }
 
 // Equipped items (cat.items = [{key,kind,frame,name}] decoded in save-decode.js). Shows a
