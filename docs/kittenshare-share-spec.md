@@ -32,6 +32,7 @@ schema version). Parsers read `v` first and dispatch on it.
 | Version | Status  | Date       | Change |
 |---------|---------|------------|--------|
 | v1      | current | 2026-07-15 | Initial frozen schema: `v n c g a s k p cp xp`. Carries the full 14-slot appearance (as 11 unique frames), 7 core stats + HP, pattern + coat + class palette. Shared cards render VERIFIED. |
+| v1 (+)  | current | 2026-07-17/18 | Additive optional fields per rule 3 — `j` (injuries), `i` (equipped-item keys), `y` (age at share time). See the additive-fields table in §4. Old links without them still decode; old consumers ignore them. |
 
 **Evolution rules (permanent):**
 
@@ -112,6 +113,17 @@ compresses the redundancy in the string fields.
 | `p`  | int             | pattern id (`0 … ~706`)                     | Fur PATTERN (CatTexture frame index). |
 | `cp` | int             | coat palette row (`1 … 49`)                 | Coat COLOR (direct row index into `textures/palette.png`). |
 | `xp` | int             | class palette row (`50 … 68`) or `-1`       | Class accent palette row; `-1` = none. |
+
+### Additive optional fields (v1, per evolution rule 3)
+
+These shipped after the initial freeze as **optional** keys — absent on old links, ignored
+by pre-field consumers, and never part of the frozen `k`/`s`/`p` contract:
+
+| Key | Type          | Added      | Meaning |
+|-----|---------------|------------|---------|
+| `j` | [int,int][]   | 2026-07-17 | Injuries as `[id, count]` pairs (≤ 16). Name/penalty/scars are rebuilt from `INJURY_TABLE` on decode — **never trusted from the wire**. Unknown ids dropped. |
+| `i` | string[]      | 2026-07-18 | Equipped-item **key strings** (≤ 12) — the stable ascii tokens from the blob, same reasoning as ability ids. Kind/frame/name/stats are rebuilt from `ITEM_VOCAB` on decode; unknown keys and duplicates dropped. |
+| `y` | int           | 2026-07-18 | The cat's **age**, computed by the producer at share time (`current_day − birth_day`, frozen at death). Carried because the recipient has no save to compute it from. Validated `1 … 99999` on decode; absent/invalid → `null` and the card omits the tag. |
 
 **Why ability *id strings*, not indices:** `public/kittenshare/ability-ids.js` is
 auto-generated "longest-first" and can **reorder** whenever it is regenerated. Storing an

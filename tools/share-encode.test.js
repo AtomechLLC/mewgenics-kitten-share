@@ -160,5 +160,43 @@ test('bad-link: null / garbage / oversized inputs return null without throwing',
   assert.strictEqual(d, null, 'non-string -> null');
 });
 
+// 7. ITEMS + AGE (additive v1 fields `i` / `y`): item KEYS round-trip and rebuild their full
+// record from ITEM_VOCAB (never the wire); unknown keys are dropped; the age is computed by
+// the producer from currentDay and carried as a plain int; a link minted WITHOUT either field
+// (a pre-items/age v1 link) still decodes with items [] and age null.
+test('items+age: keys round-trip via vocab, unknown keys dropped, age carried', () => {
+  const base = {
+    name: 'Pack Rat', cls: 'Thief', gender: 'female',
+    abilities: [], stats: null, birthDay: 100, deathDay: null,
+    items: [
+      { key: 'ScrapHat', kind: 'head', frame: 1, name: 'Scrap Metal Hat' },
+      { key: 'NotARealItemKey999', kind: 'face', frame: 1, name: 'Bogus' },
+    ],
+    genes: { pattern: 1, coatPalette: 17, classPalette: -1,
+      slots: { Body: 1, Head: 1, Tail: 1, RearLeg_L: 1, RearLeg_R: 1, FrontLeg_L: 1,
+        FrontLeg_R: 1, Eye_L: 1, Eye_R: 1, Brow_L: 1, Brow_R: 1, Ear_L: 1, Ear_R: 1,
+        Mouth: 1 } }
+  };
+  const back = decodeShare(encodeShare(base, { currentDay: 123 }));
+  assert.ok(Array.isArray(back.items), 'decoded cat has an items array');
+  assert.strictEqual(back.items.length, 1, 'the unknown item key was dropped');
+  assert.strictEqual(back.items[0].key, 'ScrapHat', 'the real key survives');
+  assert.strictEqual(typeof back.items[0].kind, 'string', 'kind rebuilt from ITEM_VOCAB');
+  assert.ok(back.items[0].name && back.items[0].name !== 'Bogus', 'name comes from the vocab, not the wire');
+  assert.strictEqual(back.age, 23, 'age = currentDay 123 - birthDay 100, carried as `y`');
+  // No currentDay -> no age field -> decodes null (never a guess).
+  const noDay = decodeShare(encodeShare(base));
+  assert.strictEqual(noDay.age, null, 'no currentDay at encode -> age null on decode');
+  // A dead cat's age freezes at its death day regardless of currentDay.
+  const dead = decodeShare(encodeShare(
+    Object.assign({}, base, { deathDay: 110 }), { currentDay: 999 }));
+  assert.strictEqual(dead.age, 10, 'dead cat: age frozen at deathDay - birthDay');
+  // Backward compat: a v1 link minted before `i`/`y` existed (no items, no day) still decodes.
+  const old = decodeShare(encodeShare(
+    Object.assign({}, base, { items: [], birthDay: null })));
+  assert.deepStrictEqual(old.items, [], 'itemless old-style link -> items []');
+  assert.strictEqual(old.age, null, 'ageless old-style link -> age null');
+});
+
 if (failures) { console.error(`\n${failures} test(s) failed.`); process.exit(1); }
 console.log('\nAll share-encode behavior tests passed.');

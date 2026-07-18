@@ -1221,7 +1221,12 @@ function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').rep
 // reads as the age it died at rather than ticking on with the calendar.
 function ageText(c){
   if (typeof catAge !== 'function' || !c) return '';
-  const age = catAge(c.birthDay, CURRENT_DAY, c.deathDay);
+  let age = catAge(c.birthDay, CURRENT_DAY, c.deathDay);
+  // Shared card: no save, no day stamps — but the link carries the age the PRODUCER computed
+  // at share time (payload `y`). Honest and labelled as such; absent -> no tag, never a guess.
+  if (age == null && Number.isInteger(c.age)) {
+    return ` <span class="kage" title="age when this link was shared — the recipient has no save to recompute it from">Age ${esc(String(c.age))}</span>`;
+  }
   if (age == null) return '';
   const died = Number.isInteger(c.deathDay) && c.deathDay >= 0;
   const why = died
@@ -1729,7 +1734,9 @@ function share(key, btn){
   // Build the fragment via the shared codec — no btoa, no manual char-swap (the
   // lz-string blob is already URI-safe). SHR-02 producer guard: a >1900-char URL is
   // refused rather than copied. In practice real cats land ~200 chars (10x headroom).
-  const blob = SaveDecode.encodeShare(c);
+  // currentDay lets the codec carry the cat's age (`y`) — the recipient has no save to
+  // compute it from. null day -> the field is simply omitted, never a guessed age.
+  const blob = SaveDecode.encodeShare(c, { currentDay: CURRENT_DAY });
   const url = location.origin + location.pathname + '#k=' + blob;
   if (!blob || url.length > 1900){ flashBtn(btn, '⚠ Link too long', 2200); return; }
   // Prefer the async Clipboard API; on ANY failure fall back to execCommand, and if even that

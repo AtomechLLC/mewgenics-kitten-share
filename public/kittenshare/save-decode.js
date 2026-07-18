@@ -742,7 +742,9 @@
   // via decodeMutations (share-spec §4).
   function shNum(x) { var n = Number(x); return Number.isFinite(n) ? n : 0; }
 
-  function encodeShare(cat) {
+  // opts.currentDay (optional): the save's current_day, needed to compute the age carried in
+  // the additive `y` field — the cat record itself only holds day STAMPS, not an age.
+  function encodeShare(cat, opts) {
     var LZ = getLZString();
     if (!LZ) return null;
     cat = cat || {};
@@ -775,6 +777,19 @@
     if (Array.isArray(cat.injuries) && cat.injuries.length) {
       payload.j = cat.injuries.slice(0, 16).map(function (x) { return [shNum(x.id), shNum(x.count) || 1]; });
     }
+    // Equipped items (additive, optional): item KEY STRINGS, same reasoning as ability ids —
+    // the key is the stable ascii token from the blob; kind/frame/name/stats are rebuilt from
+    // ITEM_VOCAB on decode (never trusted from the wire). Omitted when the cat carries nothing.
+    if (Array.isArray(cat.items) && cat.items.length) {
+      payload.i = cat.items.slice(0, 12).map(function (x) { return String(x && x.key || ''); })
+        .filter(function (k) { return k.length > 0; });
+      if (!payload.i.length) delete payload.i;
+    }
+    // Age (additive, optional): the age is NOT stored in the record — it is current_day minus
+    // the birth-day stamp (frozen at death). The recipient has no save and no current_day, so
+    // the producer computes it once at share time and carries the single int.
+    var age = catAge(cat.birthDay, opts && opts.currentDay, cat.deathDay);
+    if (age != null) payload.y = age;
     return LZ.compressToEncodedURIComponent(JSON.stringify(payload));
   }
 
@@ -825,12 +840,32 @@
           injuries.push({ id: t.id, name: t.name, count: cnt, penalty: t.stats, scars: t.scars });
         }
       }
+      // Items: the wire carries only stable KEY STRINGS; kind/frame/name/stats are rebuilt from
+      // ITEM_VOCAB (same never-trust-the-wire rule as injuries). Unknown keys and duplicates are
+      // dropped — honest, never fabricated. An absent/old-version `i` -> no items.
+      var items = [];
+      var itemLookup = Array.isArray(p.i) ? getItemLookup(opts) : null;
+      if (itemLookup) {
+        var seenItem = {};
+        for (var ii = 0; ii < p.i.length && items.length < 12; ii++) {
+          var ikey = String(p.i[ii] == null ? '' : p.i[ii]);
+          var rec = Object.prototype.hasOwnProperty.call(itemLookup, ikey) ? itemLookup[ikey] : null;
+          if (!rec || seenItem[rec.key]) continue;
+          seenItem[rec.key] = 1;
+          items.push(rec);
+        }
+      }
+      // Age: computed by the producer at share time (`y`); sanity-capped like current_day is on
+      // the local path. null when absent — the card then omits the tag, never invents an age.
+      var age = (Number.isInteger(p.y) && p.y >= 1 && p.y < 100000) ? p.y : null;
       return {
         name: String(p.n == null ? '' : p.n),
         cls: String(p.c == null ? '' : p.c),
         gender: String(p.g == null ? '' : p.g),
         abilities: Array.isArray(p.a) ? p.a.map(String) : [],
         injuries: injuries,
+        items: items,
+        age: age,
         stats: s ? {
           str: shNum(s[0]), dex: shNum(s[1]), con: shNum(s[2]), int: shNum(s[3]),
           spd: shNum(s[4]), cha: shNum(s[5]), lck: shNum(s[6]),
