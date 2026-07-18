@@ -305,6 +305,12 @@
   .share-btn.copied{background:#7a5aa8}
   /* Grid cards open their hero view on click (the share button keeps its own action). */
   .cards .kcard{cursor:pointer}
+  /* Explicit open-in-new-tab button, pinned to the card's top-right corner above the tape. */
+  .opencard-btn{position:absolute;top:-6px;right:-4px;z-index:7;width:26px;height:26px;
+    font-size:14px;font-weight:800;line-height:1;color:var(--ink);background:var(--paper3);
+    border:2px solid var(--ink);border-radius:7px 5px 6px 5px/5px 6px 5px 7px;cursor:pointer;
+    box-shadow:1px 1px 0 rgba(43,38,34,.2);padding:0}
+  .opencard-btn:hover{background:var(--paper2)}
   /* CTA under the hero card — a paper button matching the share button, not a bare text link. */
   .ctarow{text-align:center;margin-top:14px}
   .cta-btn{display:inline-block;font-family:var(--hand);font-size:14px;font-weight:800;color:var(--paper3);
@@ -1789,7 +1795,13 @@ function kittenCard(c, big){
   // the share button — the raw key never reaches the DOM unvalidated. tabindex/role make the
   // card keyboard-activatable (Enter/Space handled by the #cards listener).
   const clickable = !big && c.key != null;
+  // Explicit top-right open button (solo cards open in a NEW TAB, so the grid tab keeps the
+  // loaded save) — plus the whole card stays clickable for the same action.
+  const openBtn = clickable
+    ? `<button class="opencard-btn" data-key="${esc(String(c.key))}" title="open ${esc(c.name)}'s card in a new tab" aria-label="open ${esc(c.name)}'s card in a new tab">⧉</button>`
+    : '';
   return `<div class="kcard${big?' single':''}"${clickable ? ` data-key="${esc(String(c.key))}" tabindex="0" role="button" aria-label="open ${esc(c.name)}'s card"` : ''}>
+    ${openBtn}
     ${classDogtag(c)}
     <div class="kname"><span>${esc(c.name)}</span>${genderIcon(c.gender)}</div>
     <div class="kmeta">${metaLead}${ageText(c)}</div>
@@ -1821,9 +1833,8 @@ function kittenCard(c, big){
 // conversion CTA. Both are paper buttons, not bare text links.
 function shareCTA(){
   const dl = `<button class="cta-btn alt" onclick="downloadPortraitPng()" title="Save this kitten's portrait as a 1024px PNG">⬇ portrait PNG</button>`;
-  if (allCats.length) {
-    return `<p class="ctarow"><button class="cta-btn" onclick="history.back()">← back to your kittens</button> ${dl}</p>`;
-  }
+  // Solo views always live in their own save-less tab now (openCard uses window.open), so the
+  // CTA is simply the recipient conversion link; a local user just closes the tab.
   return `<p class="ctarow"><a class="cta-btn" href="${location.pathname}">Open your own save →</a> ${dl}</p>`;
 }
 function showShareView(html){
@@ -2019,6 +2030,8 @@ async function tryShareView(){
 // onclick with an interpolated value (the untrusted cats.key would be a stored-XSS
 // vector the moment it reached innerHTML). data-key holds a validated safe integer.
 document.getElementById('cards').addEventListener('click', e => {
+  const ob = e.target.closest('.opencard-btn');
+  if (ob) { openCard(Number(ob.dataset.key)); return; }
   const b = e.target.closest('.share-btn');
   if (b) { share(Number(b.dataset.key), b); return; }
   if (e.target.closest('a')) return;   // ability-name links keep their own navigation
@@ -2033,18 +2046,16 @@ document.getElementById('cards').addEventListener('keydown', e => {
   const card = e.target.closest('.kcard');
   if (card && card.dataset.key != null) { e.preventDefault(); openCard(Number(card.dataset.key)); }
 });
-// In-page card open: mint the cat's share blob, put it in the hash (a real history entry, so
-// the browser Back button returns to the grid), and render WITHOUT reloading — a reload would
-// drop the loaded save. __localNav tells the hashchange listener we already rendered.
-let __localNav = false;
+// Solo-card open: mint the cat's share blob and open it in a NEW TAB. The grid tab keeps the
+// loaded save untouched — the earlier in-page swap lost the roster to any reload on the hero
+// view (Back then forced re-opening the save file), so the solo view now always gets its own
+// tab, exactly like a recipient following the link.
 function openCard(key){
   const c = allCats.find(x => x.key === key);
   if (!c) return;
   const blob = SaveDecode.encodeShare(c, { currentDay: CURRENT_DAY });
   if (!blob) return;
-  __localNav = true;
-  location.hash = 'k=' + blob;
-  tryShareView();
+  window.open(location.origin + location.pathname + '#k=' + blob, '_blank', 'noopener');
 }
 // 🎲 open a random shareable kitten (any cat with a valid key) — cheap discovery in a
 // four-digit roster.
@@ -2082,11 +2093,10 @@ drop.ondrop = e => { e.preventDefault(); drop.classList.remove('drag'); const f 
       .catch(() => { btn.textContent = '🛠 __demo.sav not found'; });
   };
 })();
-// Hash navigation: an in-page card open has already rendered (skip); Back from a locally
-// opened card clears the hash — restore the grid in place (a reload would drop the save);
-// any OTHER hash change (a pasted link) still reloads so tryShareView runs fresh.
+// Hash navigation: solo cards open in their own tab now, so a hash change here is always
+// external (a pasted link, or manually clearing it). Defensive: if the hash clears while a
+// save is loaded, restore the grid in place; anything else reloads so tryShareView runs fresh.
 window.addEventListener('hashchange', () => {
-  if (__localNav) { __localNav = false; return; }
   if (!location.hash.startsWith('#k=') && allCats.length) { hideShareView(); return; }
   location.reload();
 });
