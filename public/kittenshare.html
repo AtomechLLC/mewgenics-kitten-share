@@ -41,9 +41,13 @@
   h1{font-size:20px;font-weight:600;margin-bottom:4px}
   .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
   .topbar h1{margin-bottom:0}
+  /* Paper-styled to match the scrapbook theme (was flat Discord blue). */
   .discord{display:inline-flex;align-items:center;gap:6px;text-decoration:none;font-size:13px;
-    font-weight:600;color:#fff;background:#5865f2;padding:5px 10px;border-radius:8px;white-space:nowrap}
-  .discord:hover{background:#4752c4}
+    font-family:var(--hand);font-weight:800;color:var(--ink);background:var(--paper);
+    border:2px solid var(--ink);border-radius:10px 8px 9px 8px/8px 9px 8px 10px;
+    padding:4px 12px;white-space:nowrap;box-shadow:1px 1px 0 rgba(43,38,34,.16)}
+  .discord:hover{background:var(--paper2)}
+  .discord svg{color:#5865f2}
   .discord svg{width:18px;height:18px;flex:none}
   .subtitle{font-size:13px;color:#666;margin-bottom:1rem}
   .subtitle a{color:#2d6a4f}
@@ -105,7 +109,10 @@
     padding:0 6px;line-height:1.5;box-shadow:1px 1px 0 rgba(43,38,34,.16);transform:rotate(-3deg)}
   /* Display-only puppet: never let the (animated) portrait intercept a click meant for the
      card's buttons. Belt-and-suspenders — the svg already clips its own hit area. */
-  .kcard .portrait{width:150px;height:150px;pointer-events:none}
+  /* Negative margins trim the empty headroom baked into the puppet viewBox, so short cards
+     don't show a blank paper gulf between the MP badge, the cat, and the abilities. */
+  .kcard .portrait{width:150px;height:150px;pointer-events:none;margin-top:-14px;margin-bottom:-10px}
+  .single .portrait{margin-top:-18px;margin-bottom:-12px}
   /* Name row mirrors the game's banner: class emblem, name, then the ♂/♀ glyph. Both glyphs
      are currentColor art, so they inherit the name's colour. */
   /* Name = the REAL in-game banner ribbon (tex-banner.png, bitmap 1167). border-image keeps the
@@ -231,7 +238,9 @@
      with its value in a paper box. */
   .kcard .kstats{display:flex;gap:10px;margin-top:8px;width:100%;justify-content:center;
     background:var(--paper);border:2px solid var(--ink);border-radius:11px 9px 10px 9px/9px 10px 9px 11px;padding:7px 9px}
-  .kcard .kstatcol{display:flex;flex-direction:column;gap:3px}
+  /* min-width keeps the two columns the same size across cards, so a neighbour with wound/bonus
+     badges doesn't make its panel visibly wider than the rest of the row. */
+  .kcard .kstatcol{display:flex;flex-direction:column;gap:3px;min-width:92px}
   .kcard .kstat{display:flex;align-items:center;gap:4px;color:#2b2b2b}
   /* Each stat icon sits on its own little white tile, like the game's stat rows. */
   .kcard .kstat svg{width:15px;height:15px;flex:0 0 15px;display:block;box-sizing:content-box;
@@ -1504,7 +1513,11 @@ function statsBlock(s, cat, internals){
   const chaBasis = internals && s.cha != null ? s.cha + ((mods.cha) || 0) : s.cha;
   const mp = derivedMp(chaBasis);
   const cells = [];
+  // HP renders EXPLICITLY even when unknown: some cards showing "HP 24" while neighbours show
+  // nothing read as an omission bug. The dash is honest — the stored value failed validation
+  // for this record, so we show that we looked rather than silently skipping the row.
   if (s.hp != null) cells.push(`<span class="stat" title="max health — the game computes it as effective CON × 4"><b>HP</b> ${esc(String(s.hp))}</span>`);
+  else cells.push(`<span class="stat derived" title="HP couldn't be validated from this record (the stored value failed the plausibility check), so it isn't shown — never guessed"><b>HP</b> —</span>`);
   if (mp != null) cells.push(`<span class="stat derived" title="max mana — DERIVED, not stored in the save: the game computes it as CHA × 3 (${esc(String(chaBasis))} × 3)"><b>MP</b> ${esc(String(mp))} <i>≈</i></span>`);
   if (s.level != null) cells.push(`<span class="stat"><b>LVL</b> ${esc(String(s.level))}</span>`);
   const extra = cells.join('');
@@ -1583,44 +1596,22 @@ function injuryBlock(c){
 // compact list grouped by slot with an emoji per kind. Worn kinds (head/face/neck/weapon)
 // are the ones that also render on the portrait; trinket/modifier are inventory-only.
 const ITEM_KIND_ICON = { head:'👑', face:'😎', neck:'📿', weapon:'⚔️', trinket:'🎒', modifier:'✨' };
-// Inject reusable in-game UI art (ui-card.js) into the DOM ONCE as <symbol>s, so the ~69 KB
-// item-slot frame is defined a single time and every slot references it via <use>. Without
-// this, 120 grid cards would each inline the full frame body (multi-MB DOM). Idempotent.
-let __uiDefsInjected = false;
-function ensureUiDefs(){
-  if (__uiDefsInjected || typeof UI_CARD === 'undefined') return;
-  __uiDefsInjected = true;
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('style', 'position:absolute;width:0;height:0;overflow:hidden');
-  svg.setAttribute('aria-hidden', 'true');
-  const box = UI_CARD.itemBox;
-  svg.innerHTML = box ? `<defs>${box.defs}</defs><symbol id="ui-itembox" viewBox="${box.viewBox}">${box.body}</symbol>` : '';
-  document.body.appendChild(svg);
-}
+// Equipped items as the game's inventory slots: the REAL slot texture (tex-itemslot.png,
+// ui.swf bitmap 112) is pure CSS border-image on .kibox — no JS asset dependency at all.
+// (The ornate itemboxbg_681 frame tried first turned out to be the SET BONUS frame; the old
+// <symbol>/<use> plumbing and its ensureUiDefs injector are gone with it.)
 function itemBlock(c){
   const its = Array.isArray(c.items) ? c.items : [];
   if (!its.length) return '';
-  // Real in-game item-slot frame (itemboxbg_681 from ui.swf) around each item, with the kind
-  // emoji inside and the name below — the game's inventory-slot look. Falls back to a plain
-  // text row if ui-card.js didn't load (never a blank).
-  const box = (typeof UI_CARD !== 'undefined' && UI_CARD.itemBox) || null;
-  if (!box) {
-    const cells = its.map(i => `<span>${ITEM_KIND_ICON[i.kind] || '•'} <b>${esc(i.name)}</b> <span class="islot">${esc(i.kind)}</span></span>`).join(' · ');
-    return `<div class="kitem">🎒 ${cells}</div>`;
-  }
-  // The slot box is now the real INVENTORY SLOT texture (tex-itemslot.png) applied as a CSS
-  // border-image on .kibox — no SVG frame needed. (The ornate ui_fla.itemboxbg_681 we used
-  // before is the game's SET BONUS frame, not an item slot.)
-  const frame = '';
   const cells = its.map(i => {
     // Real item icon (item-icons.js maps the blob's item key -> the vendored icon). The per-slot
     // emoji is only a FALLBACK for the ~4% of items with no wiki record — never a wrong icon.
     const src = (typeof ITEM_ICONS !== 'undefined' && i.key) ? ITEM_ICONS[i.key] : null;
     const icon = src
-      ? `<img class="kiimg" src="${esc(src)}" alt="" loading="lazy">`
+      ? `<img class="kiimg" src="${esc(src)}" alt="${esc(i.name)}" loading="lazy">`
       : `<span class="kiemoji">${ITEM_KIND_ICON[i.kind] || '•'}</span>`;
     return `<div class="kislot" title="${esc(i.name)} — ${esc(i.kind)}">` +
-      `<div class="kibox">${frame}${icon}</div>` +
+      `<div class="kibox">${icon}</div>` +
       `<div class="kiname">${esc(i.name)}</div></div>`;
   }).join('');
   return `<div class="kitemgrid">${cells}</div>`;
