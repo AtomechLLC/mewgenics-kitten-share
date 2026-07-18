@@ -38,7 +38,7 @@
   .paperbg{background-color:var(--paper);
     background-image:radial-gradient(rgba(90,70,40,.05) 1px,transparent 1px),linear-gradient(rgba(0,0,0,.02),rgba(0,0,0,0));
     background-size:5px 5px,100% 100%}
-  h1{font-size:20px;font-weight:600;margin-bottom:4px}
+  h1{font-family:var(--hand);font-size:24px;font-weight:800;color:var(--ink);margin-bottom:4px}
   .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
   .topbar h1{margin-bottom:0}
   /* Paper-styled to match the scrapbook theme (was flat Discord blue). */
@@ -49,19 +49,36 @@
   .discord:hover{background:var(--paper2)}
   .discord svg{color:#5865f2}
   .discord svg{width:18px;height:18px;flex:none}
-  .subtitle{font-size:13px;color:#666;margin-bottom:1rem}
-  .subtitle a{color:#2d6a4f}
-  .drop{border:2px dashed #b8a88f;border-radius:12px;background:#fffdf8;padding:2.2rem;text-align:center;color:#7a6f5d;cursor:pointer;margin-bottom:1rem}
-  .drop.drag{background:#f3ecdd;border-color:#8a6f4d}
-  .drop small{display:block;margin-top:6px;color:#a89a83}
+  .subtitle{font-family:var(--hand);font-size:14px;font-weight:600;color:var(--ink-soft);margin-bottom:1rem}
+  .subtitle a{color:#4d6838}
+  /* The drop zone is a torn-paper sheet like the cards — the landing page speaks the same
+     scrapbook language as the payoff. */
+  .drop{font-family:var(--hand);font-weight:700;border:15px solid transparent;
+    border-image:url('kittenshare/tex-paper.png') 54 fill / 15px / 0 stretch;
+    padding:1.8rem;text-align:center;color:var(--ink);cursor:pointer;margin-bottom:1rem;
+    filter:drop-shadow(2px 3px 1px rgba(43,38,34,.2))}
+  .drop.drag{filter:drop-shadow(2px 3px 1px rgba(43,38,34,.2)) brightness(0.96)}
+  .drop small{display:block;margin-top:6px;color:var(--ink-soft);font-weight:600}
   .hint{font-size:11.5px;color:#999;margin:-6px 0 12px}
   code{background:#efe9dd;padding:1px 5px;border-radius:4px;font-size:12px}
-  #status{font-size:13px;color:#666;padding:6px 0;min-height:18px}
+  #status{font-family:var(--hand);font-size:14px;font-weight:700;color:var(--ink-soft);padding:6px 0;min-height:18px}
   .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
   /* Scoped to the search box: a bare `.controls input` also hit the internals checkbox,
      stretching it to 220px and shoving its label far to the right. */
-  .controls input[type="search"]{padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;width:220px}
-  .wip{background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:8px;font-size:12px;padding:7px 11px;margin-bottom:12px;line-height:1.5}
+  .controls input[type="search"]{font-family:var(--hand);font-weight:700;color:var(--ink);
+    background:var(--paper3);padding:5px 10px;border:2px solid var(--ink);
+    border-radius:9px 7px 8px 7px/7px 8px 7px 9px;font-size:13px;width:220px}
+  .controls input[type="search"]::placeholder{color:var(--ink-soft);opacity:.7}
+  .controls .tgl{color:var(--ink-soft)}
+  /* Accuracy notes as a collapsed paper tag — accurate but debug-flavoured, so opt-in. */
+  .wip{font-family:var(--hand);font-size:12.5px;color:var(--ink);background:var(--paper);
+    border:2px solid var(--ink);border-radius:10px 8px 9px 8px/8px 9px 8px 10px;
+    padding:6px 11px;margin-bottom:12px;line-height:1.5}
+  .wip summary{cursor:pointer;font-weight:800;color:var(--ink-soft)}
+  .wip .wipbody{margin-top:6px}
+  /* Sample-kitten label above the demo card on the cold landing page. */
+  .demolabel{font-family:var(--hand);text-align:center;font-size:14px;font-weight:800;
+    color:var(--ink-soft);margin:14px 0 6px}
   .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
   /* REAL aged-paper texture from ui.swf (bitmap 1, warm-tinted): the hand-drawn torn black
      edge is the border slice, the paper grain fills the middle (border-image `fill`). One
@@ -353,15 +370,21 @@
   <!-- DEV ONLY: loads public/__demo.sav (gitignored). Shown only on localhost — never on the
        deployed site (and the file isn't published there anyway). -->
   <button id="devLoad" style="display:none;margin-top:8px;font-size:12px;padding:5px 10px;border:1px dashed #b8a88f;border-radius:8px;background:#fffdf8;color:#7a6f5d;cursor:pointer">🛠 dev: load __demo.sav</button>
-  <div class="wip">🐾 <b>Names, stats and appearance are decoded from your save.</b> Stats (7 core + HP) are real,
-    verified values. Portraits now use each cat's <b>real</b> data: the game's own idle-pose rig (from
+  <!-- The full technical accuracy notes, collapsed — accurate but reads as debug text to a
+       first-time visitor, so it opens on demand instead of greeting everyone. -->
+  <details class="wip"><summary>🐾 about the data — everything is decoded from your save, nothing invented</summary>
+    <div class="wipbody"><b>Names, stats and appearance are decoded from your save.</b> Stats (7 core + HP) are real,
+    verified values. Portraits use each cat's <b>real</b> data: the game's own idle-pose rig (from
     <code>catanis.swf</code>), the cat's <b>real coat color</b> (its palette row), and its <b>real fur pattern</b>
     (tabby/spots/stripes — the <code>CatTexture</code> sheet, tinted to the coat and clipped to each part).
     One approximation remains: SVG can't do the game's per-pixel UV sampling, so stripes render straight rather
     than wrapped to the body contour, but they read correctly as the cat's markings. Cats from an unrecognized
     build, or whose genes fail the range/symmetry check, render a neutral base kitten labelled
-    "appearance unverified".</div>
+    "appearance unverified".</div></details>
   <div id="status"></div>
+  <!-- Cold-landing sample: a real shared kitten rendered from a baked share blob, so a visitor
+       sees the payoff before finding their save file. Hidden the moment a save loads. -->
+  <div id="demoView" style="display:none"></div>
   <div class="controls" id="controls" style="display:none">
     <input type="search" id="srch" placeholder="Search kittens…" oninput="renderCards()">
     <label class="tgl" id="houseTgl" style="display:none" title="Show only the cats currently living in your house. The save's cat table holds every cat that ever existed — ancestors, the dead, the long gone — so this filters to the roster in house_state.">
@@ -1251,6 +1274,7 @@ async function openSave(buf){
   // sits near the top (they leave ~400px of dead space above the cards otherwise).
   const dz = document.getElementById('drop'); if (dz) dz.style.display = 'none';
   const wip = document.querySelector('.wip'); if (wip) wip.style.display = 'none';
+  hideDemo();   // the sample kitten yields to the real roster
   renderCards();
 }
 
@@ -1811,6 +1835,33 @@ function hideShareView(){
   document.getElementById('shareView').style.display = 'none';
   document.getElementById('openView').style.display = '';
 }
+// Cold-landing sample kitten: a REAL cat baked as a standard share blob (v1 + items/age), so a
+// first-time visitor sees the payoff before finding a save file. Renders through the exact
+// recipient pipeline (decodeShare -> lazy part chunks -> kittenCard) — the sample IS a share
+// link, nothing special-cased. Every failure path just leaves the section hidden.
+const DEMO_BLOB = 'N4IgbiBcCMA0IDsogPIBsCmBrAzgQwQBMAnEeAY2QAkBXBAFw1PgHNkBbPTMkPKAbRAAhPDgCW5AEoEWGQgH1aDJjwDKABzGEmAURZt4AGTEIMqgBYB7ejyEY8xACrE86ngDFMeC9Z6T75OYgALrwOAIAbLBRUQDMsAAssACsKbAAtNChIFgCAJxwsQAMAByw0BFl0MkATOW19XXVdclwNTVJNW3QNdlukHlFFP1RIAAe-clDIABWAvx1scHZYgLC9k4u6uHwAAomAO6WxOxqmtrEemzZAJ5QXREAvkA';
+async function renderDemo(){
+  const host = document.getElementById('demoView');
+  if (!host || location.hash.startsWith('#k=')) return;
+  const cat = SaveDecode.decodeShare(DEMO_BLOB);
+  if (!cat || cat.__unsupportedVersion) return;
+  try { await loadNeededParts(cat.genes.slots, cat.genes.pattern); } catch (e) { return; }
+  await loadAbilityInfo(); await loadAbilityArt(cat.abilities);
+  // A save may have loaded (or a link opened) while the art fetched — the sample yields.
+  if (allCats.length || location.hash.startsWith('#k=')) return;
+  host.innerHTML = `<div class="demolabel">↑ drop your save to see YOUR kittens — here's a sample</div>` + kittenCard(cat, true);
+  host.style.display = 'block';
+  const p = kittenCard.pendingIdle;
+  kittenCard.pendingIdle = null;
+  if (p) attachIdle(host, p.cat, p.parts);
+}
+function hideDemo(){
+  const host = document.getElementById('demoView');
+  if (!host || host.style.display === 'none') return;
+  if (window.__heroStop) { window.__heroStop(); window.__heroStop = null; }
+  host.style.display = 'none';
+  host.innerHTML = '';
+}
 // A friendly, honest fallback card (never a crash or a blank page — SHR-04).
 function fallbackCard(title, msg){
   return `<div class="kcard single" style="text-align:center">
@@ -1986,7 +2037,8 @@ window.addEventListener('hashchange', () => {
   if (!location.hash.startsWith('#k=') && allCats.length) { hideShareView(); return; }
   location.reload();
 });
-tryShareView();
+// Boot: a #k= link renders the shared card; otherwise the cold landing shows the sample kitten.
+tryShareView().then(shown => { if (!shown) renderDemo(); });
 </script>
 </body>
 </html>
