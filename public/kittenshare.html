@@ -65,7 +65,9 @@
     border-radius:16px 11px 15px 12px/12px 15px 11px 16px;   /* hand-drawn wobble */
     padding:12px;display:flex;flex-direction:column;align-items:center;color:var(--ink);
     box-shadow:2px 3px 0 rgba(43,38,34,.14)}
-  .kcard .portrait{width:150px;height:150px}
+  /* Display-only puppet: never let the (animated) portrait intercept a click meant for the
+     card's buttons. Belt-and-suspenders — the svg already clips its own hit area. */
+  .kcard .portrait{width:150px;height:150px;pointer-events:none}
   /* Name row mirrors the game's banner: class emblem, name, then the ♂/♀ glyph. Both glyphs
      are currentColor art, so they inherit the name's colour. */
   /* Name = a torn-paper ribbon banner. Text/emblems ride ON TOP (crisp); a ::before backing is
@@ -83,6 +85,17 @@
   .single .kemblem{width:19px;height:19px;flex-basis:19px}
   .single .ksex{width:14px;height:14px;flex-basis:14px}
   .kcard .kmeta{font-size:11.5px;color:var(--ink-soft);font-weight:600;margin-top:3px;text-align:center}
+  /* Class shown as a pet-collar ID tag: a rounded nametag with a little ring/hole, the class
+     emblem, and the class name — sits under the name banner like the game's class collar. */
+  .kcard .kcollar{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:800;
+    color:var(--ink);background:var(--paper);border:2px solid var(--ink);
+    border-radius:10px 8px 9px 8px/8px 9px 8px 10px;padding:2px 10px 2px 7px;margin-top:6px;
+    box-shadow:1px 1px 0 rgba(43,38,34,.14);transform:rotate(-1deg)}
+  .kcard .kcollar::before{content:"";width:7px;height:7px;flex:0 0 7px;border-radius:50%;
+    border:2px solid var(--ink);background:var(--paper3)}   /* the collar ring/hole */
+  .kcard .kcollar .kemblem{width:14px;height:14px;flex-basis:14px;opacity:.9}
+  .single .kcollar{font-size:13px;padding:3px 13px 3px 9px}
+  .single .kcollar .kemblem{width:17px;height:17px;flex-basis:17px}
   /* Age as a small taped tag, like the game's "Age" label. */
   .kcard .kage{display:inline-block;font-size:10px;font-weight:700;color:var(--ink);background:var(--paper);
     border:1.5px solid var(--ink);border-radius:6px 4px 5px 4px/4px 5px 4px 6px;padding:0 6px;margin-left:4px;
@@ -143,6 +156,12 @@
   .kcard .kmut b{color:#6b3fa0;font-weight:700}
   .kcard .kmut .mreg{color:#8a6f2d;font-weight:700}
   .kcard .kmut .unknownmut{color:#a33}
+  /* Mutation effect text — hidden on the browse grid (compact), shown only on the single card. */
+  .kcard .kmut .mdesc{display:block;color:var(--ink-soft);font-weight:600;font-style:italic;font-size:10px;margin-top:1px}
+  .kcard .kinj{font-size:10.5px;color:#7a2e2e;background:#fdecec;border:1px solid #f3c9c9;border-radius:7px;padding:3px 7px;margin-top:6px;line-height:1.6;text-align:center}
+  .kcard .kinj b{color:#b33636;font-weight:700}
+  .kcard .kinj .ipen{color:#933;font-weight:700}
+  .kcard .kinj .icnt{color:#b56;font-weight:700}
   /* Stat block mirrors the in-game cat sheet: the game's own FontIcon_* glyphs
      (ui-icons.js) in two columns — STR/DEX/CON left, INT/SPD/CHA/LCK right — each
      with its value in a paper box. */
@@ -275,6 +294,9 @@
 // chunk is fetched at page load, so a shared-link recipient downloads only what their
 // one cat needs (a few hundred KB) instead of the ~4.4 MB corpus monolith.
 var CAT_PARTS = {}, HEAD_SOCKETS = {}, CAT_TEXTURES = {}, ITEM_SPRITES = {};
+// INJURY scar overlays (kittenshare/scars.js). Same merge pattern; empty until loadMonolith
+// fills it, so renderPortrait must tolerate a miss (a cat then renders with no scar art).
+var CAT_SCARS = {};
 // Ability display names + real icon art (lazy, see loadMonolith). Empty until then, so every
 // reader must tolerate a miss and fall back to the raw decoded id.
 // The icons are a uniform sheet, so ONE viewBox fits them all; the asset ships the measured
@@ -353,7 +375,21 @@ async function loadNeededParts(slots, pattern) {
       Object.assign(CAT_TEXTURES, obj);
     }));
   }
+  jobs.push(loadScars());     // small; injured shared cats need it, uninjured ones ignore it
   await Promise.all(jobs);
+}
+
+// INJURY scar overlays (kittenshare/scars.js) — memoized, shared by BOTH the local browse
+// (loadMonolith) and the standalone share (loadNeededParts) paths, so an injured cat shows
+// its scars either way. Small (~280 KB) and OPTIONAL: a fetch/eval miss never blocks the
+// portrait, it just renders without scar art (honest fallback, never a fabricated scar).
+let __scarsP = null;
+function loadScars() {
+  if (!__scarsP) __scarsP = fetch('kittenshare/scars.js')
+    .then(r => r.ok ? r.text() : '')
+    .then(t => { if (t) { try { const s = (new Function(t + '\nreturn { CAT_SCARS };'))(); Object.assign(CAT_SCARS, s.CAT_SCARS); } catch (e) { /* scars optional */ } } })
+    .catch(() => {});
+  return __scarsP;
 }
 
 // LOCAL browse view path: fetch+eval the eager corpus-union monolith (parts.js/patterns.js)
@@ -381,6 +417,7 @@ function loadMonolith() {
     Object.assign(CAT_PARTS, p.CAT_PARTS);
     Object.assign(HEAD_SOCKETS, p.HEAD_SOCKETS);
     Object.assign(CAT_TEXTURES, pt.CAT_TEXTURES);
+    loadScars();     // injury scar overlays — memoized; shared with the standalone share path
     if (itText) { try { const it = (new Function(itText + '\nreturn { ITEM_SPRITES };'))(); Object.assign(ITEM_SPRITES, it.ITEM_SPRITES); } catch (e) { /* items optional */ } }
     if (abText) { try { const ab = (new Function(abText + '\nreturn { ABILITY_INFO, ABILITY_ART, ABILITY_VIEWBOX };'))(); Object.assign(ABILITY_INFO, ab.ABILITY_INFO); Object.assign(ABILITY_ART, ab.ABILITY_ART); ABILITY_VIEWBOX = ab.ABILITY_VIEWBOX || ABILITY_VIEWBOX; } catch (e) { /* abilities degrade to ids */ } }
   });
@@ -531,6 +568,36 @@ function texSvg(pattern){
   if(!t) return null;
   return namespaceIds(t.defs || '', t.body || '');
 }
+// INJURY scars — the located per-part scar sprite (nested in catparts.swf; exported to
+// CAT_SCARS). Each decoded injury (cat.injuries) carries a body region -> a gon FRAME RANGE.
+// The exact frame within the range is NOT persisted (the save stores only the injury count),
+// so we pick a deterministic representative frame from the range, seeded by cat+injury: a
+// given cat is stable but different cats show different scar variants (as in-game). Never a
+// fabricated injury — a cat with no decoded injury has an empty plan and shows no scar.
+//
+// A scarred body region maps to a render TARGET: head/body draw on those parts; the leg scar
+// splits arms->front legs, legs->rear legs, limbs->all four. CAT_SCARS keys the leg art once.
+const SCAR_REGION_TARGET = { head:['head'], body:['body'], arms:['front'], legs:['rear'], limbs:['front','rear'] };
+const SCAR_REGION_ART = { head:'head', body:'body', arms:'leg', legs:'leg', limbs:'leg' };
+const SLOT_SCAR = { Body:'body', FrontLeg_L:'front', FrontLeg_R:'front', RearLeg_L:'rear', RearLeg_R:'rear' };
+function scarHash(s){ let h=2166136261>>>0; for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619)>>>0; } return h>>>0; }
+function buildScarPlan(cat){
+  const plan = {};   // target ('head'|'body'|'front'|'rear') -> { art:'head'|'body'|'leg', R }
+  const inj = (cat && Array.isArray(cat.injuries)) ? cat.injuries : [];
+  for (const it of inj){
+    const scars = it.scars || {};
+    for (const region in scars){
+      const range = scars[region];
+      const targets = SCAR_REGION_TARGET[region];
+      const art = SCAR_REGION_ART[region];
+      if (!Array.isArray(range) || range.length !== 2 || !targets || !art) continue;
+      const lo = range[0], hi = range[1];
+      const R = lo + (scarHash((cat && cat.name || '') + ':' + it.id) % (hi - lo + 1));   // 1-indexed gon frame
+      for (const t of targets) if (!plan[t]) plan[t] = { art: art, R: R };   // first injury per target wins
+    }
+  }
+  return plan;
+}
 function renderPortrait(cat){
   // Pose every slot with its OWN decoded frame and tint with the cat's REAL coat
   // color, but only when the decoder verified the appearance (recognized build AND
@@ -599,12 +666,31 @@ function renderPortrait(cat){
   // in its rig matrix; an idle ANIMATION re-emits the same content under a different matrix (and
   // a different layer ORDER) every frame, without re-rendering any part.
   const slotContent = {};
+  // INJURY scar overlay for a render target ('head'/'body'/'front'/'rear'). Renders the located
+  // scar sprite frame in the PART-LOCAL coords (CAT_SCARS.place[art] is the constant nested-layer
+  // matrix), so it composes with the slot's rig matrix exactly like the part art. '' when the cat
+  // has no injury for that target or scars.js failed to load. Scar art keeps rgb(), so the final
+  // tintGrays pass recolors it through the SAME coat shader the game applies (the scar is nested
+  // inside the part): black outlines/dark-red wounds/green glow pass through, gray shading tints.
+  const scarPlan = buildScarPlan(cat);
+  function scarSvg(target){
+    const pl = scarPlan[target]; if (!pl) return '';
+    if (typeof CAT_SCARS === 'undefined' || !CAT_SCARS[pl.art] || !CAT_SCARS.place) return '';
+    const f = CAT_SCARS[pl.art][pl.R]; if (!f) return '';
+    const place = CAT_SCARS.place[pl.art] || { tx:0, ty:0 };
+    const ns = f.defs ? namespaceIds(f.defs, f.body) : { defs:'', body:f.body };
+    defs += ns.defs;
+    const sx = place.sx==null?1:place.sx, sy = place.sy==null?1:place.sy;
+    return `<g transform="matrix(${sx} 0 0 ${sy} ${place.tx||0} ${place.ty||0})">${ns.body}</g>`;
+  }
   function place(slot, sprite, frame, m){
     const p = partSvg(sprite, frame); defs += p.defs;
     // No slot list needed: the art says which parts are furred. Exactly the 5 furred sprites
     // (Body/Head/Tail/Leg/Ear) carry a fur rect on every frame; eyes/brows/mouth carry none,
     // so applyFurPattern is inherently a no-op for them.
-    slotContent[slot] = applyFurPattern(p.body);
+    // A scar (if this slot has an injured target) draws ON TOP of the part art, inside the same
+    // rig group so it moves/scales with the part (and animates with it in the idle rig).
+    slotContent[slot] = applyFurPattern(p.body) + (SLOT_SCAR[slot] ? scarSvg(SLOT_SCAR[slot]) : '');
     out += `<g transform="${matStr(m)}">${slotContent[slot]}</g>`;
   }
   // Worn item art (crowns/hats/masks/collars). Look up the ITEM_SPRITES frame by the
@@ -652,6 +738,10 @@ function renderPortrait(cat){
     // The pattern is substituted INTO the head's own fur rect, so it sits under the head's
     // linework automatically and the eye/brow/mouth sockets appended below still stay on top.
     h += applyFurPattern(hp.body);
+    // Head-injury scar (Concussion/Disfigured/Jinxed/Immolated/Cursed/Radiated) — drawn on the
+    // head skin, over the fur but UNDER the eye/brow/mouth sockets appended next (matches the
+    // scar's nested depth being part of the head art, with facial features composited on top).
+    h += scarSvg('head');
     // Eyes have their OWN colors (white eyeball, e.g. baby-BLUE iris, black pupil) and must
     // NOT be recolored by the coat palette — otherwise a light-blue iris (rgb 191,204,207,
     // low spread) gets read as "gray" and tinted to the coat (e.g. pink on Ernie). Convert
@@ -1301,14 +1391,44 @@ function statsBlock(s, cat, internals){
 // >=300 is a mutation, resolved to a name via mutations-catalog.js, L/R deduped).
 // Renders a compact "🧬 Region: Name · Region: Name" line; only shown for mutated
 // cats. Names are game data but escaped anyway; uncatalogued ids show as Unknown #id.
-function mutBlock(c){
+// Mutation list. On the browse grid (big=false) it's compact: region:name only. On the single
+// cat page (big=true) each mutation also shows its decoded effect — the catalog `effect` string
+// (re-derived by decodeMutations, never invented), one per line for readability.
+function mutBlock(c, big){
   const ms = (c.genes && Array.isArray(c.genes.mutations)) ? c.genes.mutations : [];
   if (!ms.length) return '';
   const items = ms.map(m => {
     const cls = m.inCatalog ? '' : ' class="unknownmut"';
-    return `<span class="mreg">${esc(m.region)}:</span> <b${cls}>${esc(m.name)}</b>`;
-  }).join(' · ');
+    const desc = (big && m.effect) ? `<span class="mdesc">${esc(m.effect)}</span>` : '';
+    return `<span class="mreg">${esc(m.region)}:</span> <b${cls}>${esc(m.name)}</b>${desc}`;
+  }).join(big ? '' : ' · ');
   return `<div class="kmut">🧬 ${items}</div>`;
+}
+
+// The class rendered as a pet-collar ID tag (ring + real FontIcon_<Class> emblem + name).
+// Returns '' for an unknown/absent class — nothing invented; the name banner still stands alone.
+function collarTag(c){
+  if (!c || !c.cls) return '';
+  return `<div class="kcollar" title="${esc(c.cls)} class collar">${classIcon(c.cls)}<span>${esc(c.cls)}</span></div>`;
+}
+
+// Injury list from cat.injuries ([{id,name,count,penalty,scars}] decoded in save-decode.js —
+// the record's final u32[16] array, id-indexed per data/injuries.gon). Shows a compact
+// "🩹 Name ×N: STAT−n" line; only for injured cats. Each injury is a PERMANENT stat penalty;
+// the count stacks it, so the shown penalty is per-injury × count (Disfigured ×2 = CHA−2).
+// Honest: nothing renders for a cat with no decoded injury, and penalties come from the table,
+// never from the wire.
+function injuryBlock(c){
+  const inj = Array.isArray(c.injuries) ? c.injuries : [];
+  if (!inj.length) return '';
+  const items = inj.map(i => {
+    const n = i.count > 1 ? ` <span class="icnt">×${i.count}</span>` : '';
+    const pen = Object.entries(i.penalty || {})
+      .map(([k, v]) => `${k.toUpperCase()}${(v * (i.count || 1)) >= 0 ? '+' : '−'}${Math.abs(v * (i.count || 1))}`)
+      .join(' ');
+    return `<b>${esc(i.name)}</b>${n}${pen ? ` <span class="ipen">${esc(pen)}</span>` : ''}`;
+  }).join(' · ');
+  return `<div class="kinj" title="Permanent injuries from adventures — each a stat penalty and (for most) a scar shown on the portrait.">🩹 ${items}</div>`;
 }
 
 // Equipped items (cat.items = [{key,kind,frame,name}] decoded in save-decode.js). Shows a
@@ -1368,13 +1488,21 @@ function kittenCard(c, big){
   if (big) kittenCard.pendingIdle = { cat: c, parts: renderPortrait.last };
   // Section order mirrors the in-game card top-to-bottom: NAME ribbon, then meta/tags, then the
   // stat grid, then the PORTRAIT in the middle, then abilities. (Previously portrait-first.)
+  // Class now lives in the collar tag below the name; kmeta drops it (no double emblem, no
+  // duplicate class text). If the class is unknown there's no collar, so kmeta shows it instead.
+  const collar = collarTag(c);
+  const metaClass = collar ? '' : esc(c.cls || '—');
+  const metaGender = (c.gender && !genderIcon(c.gender)) ? esc(c.gender) : '';
+  const metaLead = [metaClass, metaGender].filter(Boolean).join(' · ');
   return `<div class="kcard${big?' single':''}">
-    <div class="kname">${classIcon(c.cls)}<span>${esc(c.name)}</span>${genderIcon(c.gender)}</div>
-    <div class="kmeta">${esc(c.cls||'—')}${c.gender && !genderIcon(c.gender) ? ' · '+esc(c.gender) : ''}${ageText(c)}</div>
+    <div class="kname"><span>${esc(c.name)}</span>${genderIcon(c.gender)}</div>
+    ${collar}
+    <div class="kmeta">${metaLead}${ageText(c)}</div>
     ${roomBadge(c)}${statusBadge(c)}
     ${sizeBadge(c)}
     ${unverified}
-    ${mutBlock(c)}
+    ${mutBlock(c, big)}
+    ${injuryBlock(c)}
     ${itemBlock(c)}
     ${stats}
     <div class="portrait">${portrait}</div>
@@ -1416,6 +1544,29 @@ function fallbackCard(title, msg){
   </div>`;
 }
 
+// Flash a transient label on the share button, then restore it. One place so success and
+// every failure path give the SAME visible feedback — a click must never look dead.
+function flashBtn(btn, text, ms){
+  btn.textContent = text; btn.classList.add('copied');
+  clearTimeout(btn._flash);
+  btn._flash = setTimeout(() => { btn.textContent = '🔗 Share link'; btn.classList.remove('copied'); }, ms || 1600);
+}
+// Legacy clipboard path for when the async Clipboard API is missing or rejects (non-secure
+// origin, unfocused document, denied permission). A hidden textarea + execCommand('copy')
+// works in those cases. Returns whether the copy succeeded.
+function legacyCopy(text){
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    try { ta.setSelectionRange(0, text.length); } catch (e) {}
+    const ok = !!(document.execCommand && document.execCommand('copy'));
+    document.body.removeChild(ta);
+    return ok;
+  } catch (e) { return false; }
+}
 function share(key, btn){
   const c = allCats.find(x => x.key === key);
   if (!c) return;
@@ -1424,19 +1575,26 @@ function share(key, btn){
   // refused rather than copied. In practice real cats land ~200 chars (10x headroom).
   const blob = SaveDecode.encodeShare(c);
   const url = location.origin + location.pathname + '#k=' + blob;
-  if (!blob || url.length > 1900){
-    btn.textContent = '⚠ Link too long'; btn.classList.add('copied');
-    setTimeout(()=>{ btn.textContent='🔗 Share link'; btn.classList.remove('copied'); }, 2200);
-    return;
-  }
-  navigator.clipboard.writeText(url).then(()=>{
-    btn.textContent = '✅ Copied!'; btn.classList.add('copied');
-    setTimeout(()=>{ btn.textContent='🔗 Share link'; btn.classList.remove('copied'); }, 1600);
-  }).catch(()=>{
-    // writeText rejects on non-secure origins, unfocused documents, or denied
-    // permission — fall back to showing the URL so the share still works.
+  if (!blob || url.length > 1900){ flashBtn(btn, '⚠ Link too long', 2200); return; }
+  // Prefer the async Clipboard API; on ANY failure fall back to execCommand, and if even that
+  // fails, surface the URL via prompt. Every branch ends in visible button feedback so a
+  // rejected write never leaves the button silently unresponsive (the old bare window.prompt
+  // fallback was suppressed by some browsers, which read as "the button does nothing").
+  const onOk = () => flashBtn(btn, '✅ Copied!', 1600);
+  const onFail = () => {
+    if (legacyCopy(url)) { onOk(); return; }
+    flashBtn(btn, '⚠ Copy failed', 2200);
     window.prompt('Copy this share link:', url);
-  });
+  };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(onOk, onFail);
+    } else if (legacyCopy(url)) {
+      onOk();
+    } else {
+      onFail();
+    }
+  } catch (e) { onFail(); }
 }
 async function tryShareView(){
   // lz-string's compressToEncodedURIComponent emits exactly [A-Za-z0-9+-$] (its

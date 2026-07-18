@@ -81,6 +81,54 @@
   };
   function isMutId(v) { return v >= MUT_MIN && v < MUT_MAX; }
 
+  // ---- injuries (Phase 5, disasm-located) ----
+  // SerializeCatData's FINAL field is a fixed `u32 injuries[16]` (CatData+0x744, written in
+  // a 16-iteration loop, version-gated >= 0x12), so the injury array is the LAST 64 bytes of
+  // the decompressed record: injuries[id] = record u32 @ (len-64 + id*4). The value is a COUNT
+  // (injuries stack — game strings `cat_has_injury_count_min`). Ids 0..11 are the real injuries
+  // in data/injuries.gon; ids 12..15 are reserved (the gon's own note caps the MAX tracked id
+  // at 15) and are 0 for every one of the 24,126 corpus cat-records — which, with the disasm,
+  // pins the field. Each injury is a PERMANENT stat penalty AND (for most) a scar in a body-
+  // region frame range. The specific scar FRAME within that range is rolled at runtime and NOT
+  // persisted (stored values are counts 1..5, never the 10..46 scar frames), so only the injury
+  // identity + count are decodable — the render picks a documented representative frame, never a
+  // fabricated one. NOTE: injuries are applied to EFFECTIVE stats at runtime, never to the
+  // stored base stats or hp (hp = 4x BASE con), so an injury changes only this array.
+  var INJURY_TABLE = [
+    { id: 0,  name: 'Broken Paw',    stats: { str: -1 },          scars: { arms: [10, 20] } },
+    { id: 1,  name: 'Torn Tendon',   stats: { dex: -1 },          scars: { limbs: [21, 31] } },
+    { id: 2,  name: 'Broken Rib',    stats: { con: -1 },          scars: { body: [2, 9] } },
+    { id: 3,  name: 'Concussion',    stats: { int: -1 },          scars: { head: [23, 33] } },
+    { id: 4,  name: 'Disfigured',    stats: { cha: -1 },          scars: { head: [23, 33] } },
+    { id: 5,  name: 'Broken Leg',    stats: { spd: -1 },          scars: { legs: [2, 9] } },
+    { id: 6,  name: 'Jinxed',        stats: { lck: -1 },          scars: { head: [15, 22] } },
+    { id: 7,  name: 'Immolated',     stats: { cha: -1, lck: -1 }, scars: { body: [16, 25], head: [34, 41] } },
+    { id: 8,  name: 'Exsanguinated', stats: { str: -1, dex: -1 }, scars: {} },
+    { id: 9,  name: 'Poisoned',      stats: { con: -1, int: -1 }, scars: {} },
+    { id: 10, name: 'Cursed',        stats: { lck: -2 },          scars: { head: [15, 22] } },
+    { id: 11, name: 'Radiated',      stats: { con: -1 },          scars: { body: [26, 30], head: [42, 46] } }
+  ];
+  var INJURY_ARRAY_LEN = 16;   // fixed serialized size (data/injuries.gon: MAX tracked id 15)
+  var INJURY_BY_ID = {}; for (var _ii = 0; _ii < INJURY_TABLE.length; _ii++) INJURY_BY_ID[INJURY_TABLE[_ii].id] = INJURY_TABLE[_ii];
+
+  // decodeInjuries(rec) -> [{ id, name, count, penalty:{stat:delta}, scars:{region:[lo,hi]} }].
+  // Reads the last-64-byte injuries[16] array. Returns [] on a too-short record or when the
+  // reserved slots 12..15 are nonzero (the tail isn't this layout — degrade honestly, no guess).
+  function decodeInjuries(rec) {
+    var n = rec.length;
+    if (n < 64) return [];
+    var base = n - 64;                          // injuries[16] u32 is the record's final field
+    for (var g = 12; g < INJURY_ARRAY_LEN; g++) { if (Fe(rec, base + g * 4) !== 0) return []; }
+    var out = [];
+    for (var i = 0; i < INJURY_TABLE.length; i++) {
+      var t = INJURY_TABLE[i];
+      var count = Fe(rec, base + t.id * 4);
+      if (count < 1 || count > 999) continue;    // 0 = uninjured; >999 = not this layout
+      out.push({ id: t.id, name: t.name, count: count, penalty: t.stats, scars: t.scars });
+    }
+    return out;
+  }
+
   // ---- primitive readers (bounded by callers) ----
   function Fe(e, t) { return (e[t] | (e[t + 1] << 8) | (e[t + 2] << 16) | (e[t + 3] << 24 >>> 0)) >>> 0; }
   function GA(e, t) { return new DataView(e.buffer, e.byteOffset, e.byteLength).getFloat32(t, true); }
@@ -568,6 +616,7 @@
 
     var out = {
       name: '(unnamed)', cls: '', gender: '', abilities: [], sizeTrait: null, items: [],
+      injuries: [],
       stats: null, genes: null,
       build: null, buildOk: false,
       genesResolved: GENES_RESOLVED, appearanceVerified: false
@@ -623,6 +672,10 @@
       // day counter backwards, and those simply floor to age 1).
       out.birthDay = readDayStamp(rec, BIRTH_DAY_FROM_END);
       out.deathDay = readDayStamp(rec, DEATH_DAY_FROM_END);
+
+      // Injuries — the record's final field (last 64 bytes = injuries[16] u32 counts). Each is
+      // a permanent stat penalty + (usually) a scar; honest [] when absent/short (see decodeInjuries).
+      out.injuries = decodeInjuries(rec);
       // A cat with a real death day is dead; -1 is the game's "hasn't happened" sentinel, and
       // null means this cat's tail isn't the layout we know (so we claim nothing either way).
       out.status = out.deathDay == null ? null : (out.deathDay >= 0 ? 'dead' : 'alive');
@@ -714,6 +767,14 @@
       cp: shNum(g.coatPalette),
       xp: (g.classPalette == null ? -1 : shNum(g.classPalette))
     };
+    // Injuries (additive, optional): compact [id,count] pairs. Omitted entirely when the cat
+    // has none, so an uninjured card's payload is byte-identical to a pre-injury link. A v1
+    // consumer that predates this field just ignores `j`; a newer consumer rebuilds the full
+    // injury record (name/penalty/scars) from the id via INJURY_TABLE (never trusts the wire
+    // for those). Kept out of the frozen k/s/p field contract — purely additive.
+    if (Array.isArray(cat.injuries) && cat.injuries.length) {
+      payload.j = cat.injuries.slice(0, 16).map(function (x) { return [shNum(x.id), shNum(x.count) || 1]; });
+    }
     return LZ.compressToEncodedURIComponent(JSON.stringify(payload));
   }
 
@@ -752,11 +813,24 @@
       // Mutations ride in the k/p frames (>=300) — re-derive via the same path the
       // local decode uses so a shared mutant lists its mutations too (share-spec §4).
       var mutations = decodeMutations(getMutationsCatalog(opts), pattern, slots);
+      // Injuries: rebuild the full record from the [id,count] pairs — the wire carries only the
+      // id + count; name/penalty/scars come from INJURY_TABLE (never trusted from the link). An
+      // absent/old-version `j` -> no injuries. Unknown ids are dropped (honest, never fabricated).
+      var injuries = [];
+      if (Array.isArray(p.j)) {
+        for (var ji = 0; ji < p.j.length && injuries.length < 16; ji++) {
+          var pair = p.j[ji]; if (!Array.isArray(pair)) continue;
+          var t = INJURY_BY_ID[shNum(pair[0])]; if (!t) continue;
+          var cnt = shNum(pair[1]) || 1;
+          injuries.push({ id: t.id, name: t.name, count: cnt, penalty: t.stats, scars: t.scars });
+        }
+      }
       return {
         name: String(p.n == null ? '' : p.n),
         cls: String(p.c == null ? '' : p.c),
         gender: String(p.g == null ? '' : p.g),
         abilities: Array.isArray(p.a) ? p.a.map(String) : [],
+        injuries: injuries,
         stats: s ? {
           str: shNum(s[0]), dex: shNum(s[1]), con: shNum(s[2]), int: shNum(s[3]),
           spd: shNum(s[4]), cha: shNum(s[5]), lck: shNum(s[6]),
@@ -782,6 +856,10 @@
     SLOTS: SLOTS,
     // mutation decode: exposed so tools/tests can label a slots+pattern set directly.
     decodeMutations: decodeMutations,
+    // injury decode + the id->{name,penalty,scars} table (Phase 5). decodeInjuries reads the
+    // last-64-byte injuries[16] array; the table drives both the card labels and the scar render.
+    decodeInjuries: decodeInjuries,
+    INJURY_TABLE: INJURY_TABLE,
     // age = catAge(cat.birthDay, save.properties.current_day, cat.deathDay). Exposed because
     // the day is a GLOBAL the caller must fetch; decodeCat only ever sees one cat's blob.
     catAge: catAge,
