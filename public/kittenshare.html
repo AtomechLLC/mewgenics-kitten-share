@@ -354,6 +354,10 @@
   .kcard .kbon{font-size:9px;font-weight:800;color:#fff;border:1.5px solid var(--ink);border-radius:50%;
     width:16px;height:16px;flex:0 0 16px;text-align:center;line-height:13px;display:inline-block}
   .kcard .kbon.up{background:#4f8a4a} .kcard .kbon.down{background:#a8504a}
+  /* FINAL stat value (game-style green, beside the base box). Only CON ever gets one — the
+     save stores max HP effectively, so hp/4 is the true final CON; other finals aren't stored. */
+  .kcard .kfin{font-size:11.5px;font-weight:800;color:#1b4332;background:#dcefe2;
+    border:1.5px solid #4f8a4a;border-radius:5px;padding:0 5px;min-width:23px;text-align:center;line-height:1.55}
   /* Wounded stat mark (a decoded injury reduces this stat) — the game's red cross. */
   .kcard .kwound{color:#b33636;font-weight:900;font-size:12px;line-height:1;margin-left:-1px}
   .kcard .kstat.hurt .kval{border-color:#b33636;color:#8f2b2b}
@@ -1861,8 +1865,20 @@ function statsBlock(s, cat, internals){
         const hurt = dl.wounded.has(k);
         const badge = d ? `<span class="kbon ${d > 0 ? 'up' : 'down'}" title="${esc(label)} ${d > 0 ? '+' : '−'}${Math.abs(d)} from decoded mutations, items and injuries — the game also adds level bonuses, which we do not decode">${d > 0 ? '+' : '−'}${Math.abs(d)}</span>` : '';
         const mark = hurt ? `<span class="kwound" title="${esc(label)} is reduced by a decoded injury">✚</span>` : '';
+        // CON is the ONE stat whose FINAL value is honestly decodable: the record stores max HP
+        // as an EFFECTIVE value, and the game computes it as effective CON × 4 — so hp/4 is the
+        // true final CON including level & event bonuses. Shown game-style (green final beside
+        // the base box) when it differs. The other stats' finals are NOT in the save (proven by
+        // corpus scan), so they honestly stay base-only.
+        let finalCon = '';
+        if (k === 'con') {
+          const eff = exactEffectiveCon(s);
+          if (eff != null && eff !== base) {
+            finalCon = `<span class="kfin" title="FINAL CON ${esc(String(eff))} — inverted from stored max HP (${esc(String(s.hp))} ÷ 4), so it includes level and event bonuses. CON is the only stat whose final value the save exposes.">${esc(String(eff))}</span>`;
+          }
+        }
         return `<div class="kstat${hurt ? ' hurt' : ''}" title="${esc(label)} ${esc(String(base))} (base — the decoded value)">` +
-          `${statIcon(k)}<span class="kval">${esc(String(base))}</span>${badge}${mark}</div>`;
+          `${statIcon(k)}${finalCon}<span class="kval">${esc(String(base))}</span>${badge}${mark}</div>`;
       }
       // CON prefers the HP-derived truth; every other stat is the partial rebuild.
       const exact = (k === 'con' && effCon != null);
