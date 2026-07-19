@@ -185,6 +185,20 @@
   /* Demo-roster row under the drop zone. */
   .demorow{font-family:var(--hand);font-size:13px;font-weight:700;color:var(--ink-soft);
     text-align:center;margin:-2px 0 10px;display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap}
+  /* Save-wide extras strip: mascot portrait + economy chips beside the status line. */
+  .extras{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:2px 0 8px}
+  .extras .mascot svg{width:52px;height:52px;display:block}
+  .econchip{font-family:var(--hand);font-size:12.5px;font-weight:800;color:var(--ink);
+    background:var(--paper);border:2px solid var(--ink);border-radius:9px 7px 8px 7px/7px 8px 7px 9px;
+    padding:2px 10px;margin-right:6px;display:inline-block}
+  /* Storage overlay: item chips with real icons, linking into the items reference. */
+  .storgrid{display:flex;flex-wrap:wrap;gap:6px}
+  .storchip{display:inline-flex;align-items:center;gap:5px;font-family:var(--hand);font-size:12px;
+    font-weight:700;color:var(--ink);background:var(--paper3);border:1.5px solid var(--ink);
+    border-radius:8px;padding:2px 8px;text-decoration:none}
+  .storchip img{width:22px;height:22px;object-fit:contain}
+  .storchip b{color:var(--ink-soft)}
+  .storchip:hover{background:var(--paper2);text-decoration:underline}
   .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
   /* REAL aged-paper texture from ui.swf (bitmap 1, warm-tinted): the hand-drawn torn black
      edge is the border slice, the paper grain fills the middle (border-image `fill`). One
@@ -513,6 +527,12 @@
     build, or whose genes fail the range/symmetry check, render a neutral base kitten labelled
     "appearance unverified".</div></details>
   <div id="status"></div>
+  <!-- Save-wide extras strip: the save-slot mascot cat + house economy chips. Hidden until a
+       save that carries them loads. -->
+  <div class="extras" id="saveExtras" style="display:none">
+    <span class="mascot" id="mascotSpot" title="the save-slot cat — the one the game shows on the save picker"></span>
+    <span id="econ"></span>
+  </div>
   <!-- Cold-landing sample: a real shared kitten rendered from a baked share blob, so a visitor
        sees the payoff before finding their save file. Hidden the moment a save loads. -->
   <div id="demoView" style="display:none"></div>
@@ -546,6 +566,7 @@
       <span class="ctlspacer"></span>
       <button class="rand-btn" id="randBtn" title="Open a random kitten from your roster" onclick="openRandomCard()">🎲 random</button>
       <button class="rand-btn" title="Roster analytics: stat bests, class distribution, mutation and ability censuses" onclick="showAnalytics()">📊 stats</button>
+      <button class="rand-btn" id="storageBtn" style="display:none" title="Everything in the house storage and trash, with real item icons" onclick="showStorage()">🎒 storage</button>
       <button class="rand-btn" title="Download the WHOLE roster (stats, abilities, items, mutations, injuries) as a CSV spreadsheet" onclick="exportCsv(false)">⬇ CSV all</button>
       <button class="rand-btn" title="Download only the cats matching the current search/filters/sort as a CSV spreadsheet" onclick="exportCsv(true)">⬇ CSV view</button>
     </div>
@@ -1404,6 +1425,40 @@ let CURRENT_DAY = null;
 // key -> room name for every cat currently IN THE HOUSE (from files.house_state). Empty when
 // the save has no roster, which is what hides the filter rather than showing an empty list.
 let HOUSE_ROOM = {};
+// Save-wide extras (all optional): properties map, house storage/trash item counts, the
+// save-slot mascot cat, and the unlocked classes/abilities sets.
+let SAVE_PROPS = new Map();
+let STORAGE_ITEMS = null, TRASH_ITEMS = null;
+let MASCOT = null;
+let UNLOCKED = null;
+// Scan a serializer blob for its length-prefixed ASCII strings ([u32 len][u32 0][len bytes],
+// the same framing the cat record's status strings use). Returns every plausible string; the
+// CALLER validates against a vocabulary, so a framing misread can never invent data.
+function scanPrefixedStrings(u){
+  const out = [];
+  const dv = new DataView(u.buffer, u.byteOffset, u.byteLength);
+  for (let o = 0; o + 8 < u.length; o++) {
+    const len = dv.getUint32(o, true);
+    if (len < 3 || len > 48 || dv.getUint32(o + 4, true) !== 0 || o + 8 + len > u.length) continue;
+    let ok = true, s = '';
+    for (let i = 0; i < len; i++) { const b = u[o + 8 + i]; if (b < 32 || b >= 127) { ok = false; break; } s += String.fromCharCode(b); }
+    if (ok) { out.push(s); o += 7 + len; }   // skip past the string; ++ in the loop completes it
+  }
+  return out;
+}
+// Item-blob reader: keep ONLY exact ITEM_VOCAB keys (counted), so the list is guaranteed real.
+function readItemBlob(db, key){
+  try {
+    const r = db.exec("SELECT data FROM files WHERE key='" + key + "'");
+    const b = r && r[0] && r[0].values[0] && r[0].values[0][0];
+    if (!b || typeof ITEM_VOCAB === 'undefined') return null;
+    const counts = new Map();
+    for (const s of scanPrefixedStrings(new Uint8Array(b))) {
+      if (Object.prototype.hasOwnProperty.call(ITEM_VOCAB, s)) counts.set(s, (counts.get(s) || 0) + 1);
+    }
+    return counts.size ? counts : null;
+  } catch (e) { return null; }
+}
 
 async function openSave(buf){
   document.getElementById('status').textContent = '⏳ Opening save…';
@@ -1445,6 +1500,40 @@ async function openSave(buf){
     const blob = hs && hs[0] && hs[0].values[0] && hs[0].values[0][0];
     if (blob) for (const r of SaveDecode.parseHouseRoster(new Uint8Array(blob))) HOUSE_ROOM[r.key] = r.room;
   } catch(e){ /* foreign/older save — no roster, filter hides itself */ }
+  // ---- save-wide extras (ALL optional — a miss hides its feature, never breaks the load) ----
+  // properties key->value map: house economy (gold/food) + unlock flags for the progress panel.
+  SAVE_PROPS = new Map();
+  try { for (const [k, v] of db.exec('SELECT key, data FROM properties')[0].values) SAVE_PROPS.set(k, v); } catch(e){}
+  // House storage + trash: blobs of length-prefixed item-key strings (same [u32 len][u32 0]
+  // framing as the serializer's status strings). Only EXACT ITEM_VOCAB keys are kept, so a
+  // misparse can never invent an item; counts = entry occurrences.
+  STORAGE_ITEMS = readItemBlob(db, 'inventory_storage');
+  TRASH_ITEMS = readItemBlob(db, 'inventory_trash');
+  // The save-slot mascot: files.save_file_cat IS a self-describing cat record — the same
+  // decodeCat the roster uses parses it (it's the cat the game shows on the save picker).
+  // Self-describing records are NEVER appearance-verified (no build word — an established
+  // contract, asserted in the golden tests), so the portrait would render a neutral kitten;
+  // we surface the VERIFIED fields only (name/class/stats) as a text chip instead.
+  MASCOT = null;
+  try {
+    const r = db.exec("SELECT data FROM files WHERE key='save_file_cat'");
+    const b = r && r[0] && r[0].values[0] && r[0].values[0][0];
+    if (b) { const m = decodeCat(new Uint8Array(b)); if (m && m.name && m.name !== '(unnamed)') MASCOT = m; }
+  } catch(e){}
+  // Unlocked classes + abilities: files.unlocks carries their tokens (same string framing).
+  UNLOCKED = { classes: new Set(), abilities: new Set() };
+  try {
+    const r = db.exec("SELECT data FROM files WHERE key='unlocks'");
+    const b = r && r[0] && r[0].values[0] && r[0].values[0][0];
+    if (b) {
+      const CLASSES14 = ['Colorless','Fighter','Hunter','Mage','Druid','Tank','Medic','Monk','Thief','Jester','Psychic','Necromancer','Tinkerer','Butcher'];
+      const abilSet = new Set(typeof ABILITY_IDS !== 'undefined' ? ABILITY_IDS : []);
+      for (const s of scanPrefixedStrings(new Uint8Array(b))) {
+        if (CLASSES14.includes(s)) UNLOCKED.classes.add(s);
+        else if (abilSet.has(s)) UNLOCKED.abilities.add(s);
+      }
+    }
+  } catch(e){}
   let rows;
   try { rows = db.exec('SELECT key, data FROM cats')[0]; }
   catch(e){ document.getElementById('status').textContent = '❌ No cats table in this file'; return; }
@@ -1475,6 +1564,7 @@ async function openSave(buf){
   const dr = document.querySelector('.demorow'); if (dr) dr.style.display = 'none';
   hideDemo();   // the sample kitten yields to the real roster
   loadViewSettings();   // restore the workbench (sort/filters/compact) from the last visit
+  renderSaveExtras();   // mascot + economy chips + storage button (each only if decoded)
   renderCards();
 }
 
@@ -2589,6 +2679,53 @@ function copyCompareText(btn){
     else if (legacyCopy(text)) ok(); else fail();
   } catch (e) { fail(); }
 }
+// Save-wide extras strip: the mascot cat + house economy chips (gold/food/day). Every piece
+// renders only when its data actually decoded — an older/foreign save just shows less.
+function renderSaveExtras(){
+  const strip = document.getElementById('saveExtras');
+  if (!strip) return;
+  let any = false;
+  const spot = document.getElementById('mascotSpot');
+  if (MASCOT && spot) {
+    // Verified fields only (name/class/stats decode; the record's appearance can't be
+    // verified, so no portrait — a neutral kitten posing as the mascot would be a lie).
+    const s = MASCOT.stats;
+    const statTip = s ? ` — STR ${s.str} DEX ${s.dex} CON ${s.con} INT ${s.int} SPD ${s.spd} CHA ${s.cha} LCK ${s.lck}` : '';
+    spot.innerHTML = `<span class="econchip" title="the save-slot cat (shown on the game's save picker)${esc(statTip)}">🐱 ${esc(MASCOT.name)}${MASCOT.cls ? ' · ' + esc(MASCOT.cls) : ''}</span>`;
+    any = true;
+  }
+  const chips = [];
+  const gold = Number(SAVE_PROPS.get('house_gold'));
+  const food = Number(SAVE_PROPS.get('house_food'));
+  if (Number.isFinite(gold)) chips.push(`<span class="econchip" title="house gold (properties.house_gold)">💰 ${esc(String(gold))} gold</span>`);
+  if (Number.isFinite(food)) chips.push(`<span class="econchip" title="house food (properties.house_food)">🍗 ${esc(String(food))} food</span>`);
+  if (CURRENT_DAY != null) chips.push(`<span class="econchip" title="the save's in-game day counter (properties.current_day)">📅 day ${esc(String(CURRENT_DAY))}</span>`);
+  if (chips.length) { document.getElementById('econ').innerHTML = chips.join(' '); any = true; }
+  strip.style.display = any ? 'flex' : 'none';
+  const sb = document.getElementById('storageBtn');
+  if (sb) sb.style.display = (STORAGE_ITEMS || TRASH_ITEMS) ? '' : 'none';
+}
+// House storage + trash, with the real item icons. Counts are entry occurrences in the blob;
+// only exact ITEM_VOCAB keys are listed (a framing misread can't invent an item).
+function showStorage(){
+  const section = (title, counts) => {
+    if (!counts) return '';
+    const total = [...counts.values()].reduce((a, b) => a + b, 0);
+    const chips = [...counts.entries()]
+      .map(([k, n]) => ({ k, n, name: (ITEM_VOCAB[k] && ITEM_VOCAB[k].name) || k }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map(({ k, n, name }) => {
+        const src = (typeof ITEM_ICONS !== 'undefined') && ITEM_ICONS[k];
+        const icon = src ? `<img src="${esc(src)}" alt="" loading="lazy">` : '';
+        return `<a class="storchip" href="items.html#i=${esc(encodeURIComponent(name))}" target="_blank" rel="noopener" title="open ${esc(name)} in the items reference">${icon}<span>${esc(name)}</span>${n > 1 ? `<b>×${n}</b>` : ''}</a>`;
+      }).join('');
+    return `<h3>${title} — ${counts.size} kinds, ${total} entries</h3><div class="storgrid">${chips}</div>`;
+  };
+  openOverlay(`<h2>🎒 house storage</h2>
+    ${section('storage', STORAGE_ITEMS) || '<div class="dim">storage empty (or not decodable in this save)</div>'}
+    ${section('trash', TRASH_ITEMS)}
+    <div class="dim" style="margin-top:8px">read from the save's inventory blobs; only items matching the known vocabulary are listed — nothing is guessed</div>`);
+}
 // Roster analytics: censuses over the DECODED fields of the whole roster.
 function showAnalytics(){
   if (!allCats.length) return;
@@ -2618,9 +2755,26 @@ function showAnalytics(){
   const classes = census(c => c.cls ? [c.cls] : [], 14, 'data-cls');
   const muts = census(c => ((c.genes && c.genes.mutations) || []).map(m => m.name), 10, 'data-q');
   const abils = census(c => (c.abilities || []).map(a => (typeof ABILITY_INFO !== 'undefined' && ABILITY_INFO[a] && ABILITY_INFO[a].n) || a), 10, 'data-q');
+  // Unlock progress (files.unlocks tokens + properties flags) — collection-completion at a
+  // glance. Rendered only when the save actually carried the data.
+  let unlockHtml = '';
+  if (UNLOCKED && (UNLOCKED.classes.size || UNLOCKED.abilities.size)) {
+    const ALL14 = ['Colorless','Fighter','Hunter','Mage','Druid','Tank','Medic','Monk','Thief','Jester','Psychic','Necromancer','Tinkerer','Butcher'];
+    const missing = ALL14.filter(c => !UNLOCKED.classes.has(c));
+    const flagCount = re => { let n = 0; for (const [k, v] of SAVE_PROPS) if (re.test(k) && Number(v) >= 1) n++; return n; };
+    unlockHtml = `<h3>unlock progress</h3><table>
+      <tr><th>classes</th><td><b>${UNLOCKED.classes.size}/14</b>${missing.length ? ' — missing: ' + missing.map(esc).join(', ') : ' — all of them!'}</td></tr>
+      <tr><th>abilities</th><td><b>${UNLOCKED.abilities.size}</b> ability tokens in the save's unlock list</td></tr>
+      <tr><th>map areas</th><td><b>${flagCount(/^mapflag_.*Unlocked$/)}</b> unlocked flags</td></tr>
+      <tr><th>bosses seen</th><td><b>${flagCount(/^sfunlockcounter_boss_unlock_/)}</b></td></tr>
+      <tr><th>songs</th><td><b>${flagCount(/^sfunlockcounter_song_unlock_/)}</b></td></tr>
+      <tr><th>weathers</th><td><b>${flagCount(/^sfunlockcounter_weather_unlock_/)}</b></td></tr>
+    </table>`;
+  }
   openOverlay(`<h2>📊 roster stats</h2>
     <div>${total} cats · ${inHouse} in the house · ${dead} dead · ${injured} injured · ${mutants} mutants · ${cloneCats} in clone groups</div>
     <h3>best base stat in the roster</h3><table>${bests}</table>
+    ${unlockHtml}
     <h3>classes</h3><table>${classes}</table>
     <h3>top 10 mutations</h3><table>${muts}</table>
     <h3>top 10 abilities</h3><table>${abils}</table>
