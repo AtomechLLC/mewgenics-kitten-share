@@ -2010,10 +2010,13 @@ function statDeltas(cat){
 }
 function statsBlock(s, cat, internals){
   if (!s) return '';
-  const mods = internals ? knownMods(cat) : null;
+  const dl = statDeltas(cat);
+  // Detailed view rebuilds effective = base + KNOWN deltas. Use the full statDeltas sum
+  // (mutations + items + injuries) — same source the compact game-style badge uses — so the
+  // two views agree and injury penalties are reflected, not just gear/mutation bonuses.
+  const mods = internals ? dl.delta : null;
   const effCon = internals ? exactEffectiveCon(s) : null;
   let usedExactCon = false;
-  const dl = statDeltas(cat);
   const grid = STAT_COLS.map(col => {
     const rows = col.filter(k => s[k] != null).map(k => {
       const label = STAT_LABEL[k] || k.toUpperCase();
@@ -2049,8 +2052,8 @@ function statsBlock(s, cat, internals){
       const cls = d > 0 ? 'up' : (d < 0 ? 'down' : 'zero');
       const sign = d > 0 ? '+' + d : String(d);
       const why = exact
-        ? `exact — inverted from HP (${esc(String(s.hp))} ÷ 4), so it includes level & injury bonuses`
-        : 'rebuilt from mutations + items only; level & injury bonuses not included';
+        ? `exact — inverted from HP (${esc(String(s.hp))} ÷ 4), so it includes level, gear, injury & event bonuses`
+        : 'rebuilt from mutations, items & injuries — only level bonuses aren\'t decoded';
       return `<div class="kstat" title="${esc(label)}: effective ${esc(String(eff))} = base ${esc(String(base))} ${d >= 0 ? '+' : '−'} ${Math.abs(d)} — ${why}">` +
         `${statIcon(k)}<span class="keff${d ? '' : ' zero'}${exact ? ' exact' : ''}">${esc(String(eff))}</span>` +
         `<span class="kval">${esc(String(base))}</span>` +
@@ -2072,7 +2075,7 @@ function statsBlock(s, cat, internals){
   if (s.level != null) cells.push(`<span class="stat"><b>LVL</b> ${esc(String(s.level))}</span>`);
   const extra = cells.join('');
   const note = internals
-    ? `<div class="kpartial">⚠ modifiers are REBUILT from mutations + items${usedExactCon ? '; CON is exact (inverted from HP)' : ''} — level &amp; injury bonuses aren't decoded, so the other stats can disagree with in-game</div>`
+    ? `<div class="kpartial">⚠ modifiers are REBUILT from mutations, items &amp; injuries${usedExactCon ? '; CON is exact (inverted from HP)' : ''} — only level bonuses aren't decoded, so a stat can still read low vs in-game</div>`
     : '';
   return (grid ? `<div class="kstats${internals ? ' wide' : ''}">${grid}</div>` : '') +
          (extra ? `<div class="kstats-x">${extra}</div>` : '') + note;
