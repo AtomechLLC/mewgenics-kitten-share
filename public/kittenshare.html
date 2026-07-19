@@ -386,6 +386,11 @@
     background:var(--paper3);border:1.5px solid var(--ink);border-radius:4px;padding:1px 2px}
   .kcard .kstat .kval{font-size:11.5px;font-weight:800;color:var(--ink);background:var(--paper3);
     border:1.5px solid var(--ink);border-radius:5px;padding:0 5px;min-width:23px;text-align:center;line-height:1.5}
+  /* The box now shows the TOTAL (effective) stat — tint it when it differs from base, like the
+     game: green above, red below. CON's HP-exact total gets an inner ring. */
+  .kcard .kstat .kval.up{color:#1b4332;background:#dcefe2;border-color:#4f8a4a}
+  .kcard .kstat .kval.down{color:#7a2020;background:#f3dede;border-color:#a8504a}
+  .kcard .kstat .kval.exact{box-shadow:inset 0 0 0 1px #cfe6d8}
   /* KNOWN bonus/malus (decoded mutations + items + injuries) as the game's coloured circle.
      Level bonuses are NOT decoded, so this is partial — the tooltip says so. */
   .kcard .kbon{font-size:9px;font-weight:800;color:#fff;border:1.5px solid var(--ink);border-radius:50%;
@@ -2022,27 +2027,26 @@ function statsBlock(s, cat, internals){
       const label = STAT_LABEL[k] || k.toUpperCase();
       const base = s[k];
       if (!internals) {
-        // Game-style row: [icon on a tile] [base on its tile] [known +/- badge] [wound mark].
-        const d = dl.delta[k] || 0;
+        // Game-style row: the box shows the TOTAL (effective) stat, the way the game does. For CON
+        // that total is the EXACT final (record stores max HP effectively; hp ÷ 4 = final CON with
+        // levels/gear/events baked in). For the other stats it's base + decoded mutations/items/
+        // injuries — level bonuses aren't decoded, so that total can read low vs in-game (tooltip
+        // says so). A green/red tint + a delta superscript show how far the total sits from base.
+        const d0 = dl.delta[k] || 0;
+        const exactCon = (k === 'con') && (exactEffectiveCon(s) != null);
+        const eff = exactCon ? exactEffectiveCon(s) : base + d0;
+        const d = eff - base;
         const hurt = dl.wounded.has(k);
-        const badge = d ? `<span class="kbon ${d > 0 ? 'up' : 'down'}" title="${esc(label)} ${d > 0 ? '+' : '−'}${Math.abs(d)} from decoded mutations, items and injuries — the game also adds level bonuses, which we do not decode">${d > 0 ? '+' : '−'}${Math.abs(d)}</span>` : '';
+        const cls = d > 0 ? 'up' : (d < 0 ? 'down' : 'zero');
+        const sup = d ? `<i class="kfindelta">${d > 0 ? '+' + d : d}</i>` : '';
         const mark = hurt ? `<span class="kwound" title="${esc(label)} is reduced by a decoded injury">✚</span>` : '';
-        // CON is the ONE stat whose FINAL value is honestly decodable: the record stores max HP
-        // as an EFFECTIVE value, and the game computes it as effective CON × 4 — so hp/4 is the
-        // true final CON including level & event bonuses. Shown game-style (green final beside
-        // the base box) when it differs. The other stats' finals are NOT in the save (proven by
-        // corpus scan), so they honestly stay base-only.
-        let finalCon = '';
-        if (k === 'con') {
-          const eff = exactEffectiveCon(s);
-          if (eff != null && eff !== base) {
-            const d = eff - base;
-            const delta = `<i class="kfindelta">${d > 0 ? '+' + d : d}</i>`;
-            finalCon = `<span class="kfin" title="FINAL CON ${esc(String(eff))} = base ${esc(String(base))} ${d > 0 ? '+' : '−'} ${Math.abs(d)} from levels, gear &amp; events — inverted from stored max HP (${esc(String(s.hp))} ÷ 4). CON is the only stat whose final value the save exposes; the rest are recomputed at runtime and never saved.">${esc(String(eff))}${delta}</span>`;
-          }
-        }
-        return `<div class="kstat${hurt ? ' hurt' : ''}" title="${esc(label)} ${esc(String(base))} (base — the decoded value)">` +
-          `${statIcon(k)}${finalCon}<span class="kval">${esc(String(base))}</span>${badge}${mark}</div>`;
+        const tip = exactCon
+          ? `FINAL ${esc(label)} ${esc(String(eff))} = base ${esc(String(base))} ${d >= 0 ? '+' : '−'} ${Math.abs(d)} from levels, gear, injuries &amp; events — exact, inverted from max HP (${esc(String(s.hp))} ÷ 4)`
+          : (d
+              ? `${esc(label)} total ${esc(String(eff))} = base ${esc(String(base))} ${d >= 0 ? '+' : '−'} ${Math.abs(d)} from decoded mutations, items &amp; injuries — level bonuses aren't decoded, so this can read low vs in-game`
+              : `${esc(label)} ${esc(String(base))} — base; no decoded modifiers (the game may still add level bonuses)`);
+        return `<div class="kstat${hurt ? ' hurt' : ''}" title="${tip}">` +
+          `${statIcon(k)}<span class="kval ${cls}${exactCon ? ' exact' : ''}">${esc(String(eff))}</span>${sup}${mark}</div>`;
       }
       // CON prefers the HP-derived truth; every other stat is the partial rebuild.
       const exact = (k === 'con' && effCon != null);
