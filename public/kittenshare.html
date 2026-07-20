@@ -154,6 +154,21 @@
   .star-btn.on{filter:none;opacity:1;background:#fdf3d6}
   .star-btn:hover{background:var(--paper2)}
   @media (pointer:coarse){ .star-btn{width:36px;height:36px;font-size:16px;right:78px;top:-8px} }
+  /* Base-stat distribution histograms in the analytics panel. */
+  .histgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin:6px 0}
+  .histcell{background:var(--paper3);border:1.5px solid #d8cfb8;border-radius:8px;padding:4px 6px 2px}
+  .histcell .histh{font-family:var(--hand);font-size:12px;font-weight:800;color:var(--ink-soft);text-align:center}
+  /* Genotype panel (solo card): a collapsible list of the decoded gene ids. */
+  .kgenes{margin:8px 2px 2px;font-family:var(--hand);color:var(--ink)}
+  .kgenes summary{cursor:pointer;font-size:12.5px;font-weight:800;color:var(--ink-soft);list-style:none}
+  .kgenes summary::-webkit-details-marker{display:none}
+  .kgenes summary i{font-style:normal;font-weight:600;opacity:.7;font-size:11px}
+  .kgenes .grow{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+  .gchip{font-size:11px;font-weight:800;color:var(--ink);background:var(--paper3);
+    border:1.5px solid var(--ink);border-radius:6px;padding:1px 7px;display:inline-flex;gap:5px;align-items:baseline}
+  .gchip i{font-style:normal;font-weight:600;color:var(--ink-soft);font-size:9.5px;text-transform:uppercase;letter-spacing:.03em}
+  .gchip.hl{background:#eef3e6;border-color:#7f9a5e}
+  .kgenes .ghint{font-size:10px;color:var(--ink-soft);margin-top:6px;line-height:1.35}
   /* Overlay dialogs (compare / analytics): paper panel over a dimmed page. */
   .overlay{position:fixed;inset:0;z-index:40;background:rgba(43,38,34,.45);
     display:flex;align-items:flex-start;justify-content:center;padding:4vh 12px;overflow:auto}
@@ -442,6 +457,22 @@
     border:2px solid var(--ink);border-radius:7px 5px 6px 5px/5px 6px 5px 7px;cursor:pointer;
     box-shadow:1px 1px 0 rgba(43,38,34,.2);padding:0}
   .opencard-btn:hover{background:var(--paper2)}
+  /* Corner toolbar: groups the per-card action buttons into one row that sits quietly at ~half
+     opacity and comes forward on hover/focus, so a wall of cards doesn't read as a wall of
+     buttons. Positioning is reset here; each button keeps its own look + state styles. */
+  .kcard .kcorner{position:absolute;top:-8px;right:-6px;z-index:8;display:flex;gap:4px;
+    opacity:.5;transition:opacity .14s}
+  .kcard:hover .kcorner,.kcard:focus-within .kcorner{opacity:1}
+  .kcard .kcorner .opencard-btn,.kcard .kcorner .cmp-btn,
+  .kcard .kcorner .star-btn,.kcard .kcorner .img-btn{position:static;top:auto;right:auto}
+  /* 🖼 save-image button — same paper chip as its siblings. */
+  .img-btn{position:absolute;z-index:7;width:26px;height:26px;font-size:13px;line-height:1;
+    color:var(--ink);background:var(--paper3);border:2px solid var(--ink);
+    border-radius:7px 5px 6px 5px/5px 6px 5px 7px;cursor:pointer;
+    box-shadow:1px 1px 0 rgba(43,38,34,.2);padding:0}
+  .img-btn:hover{background:var(--paper2)}
+  @media (pointer:coarse){ .kcard .kcorner{opacity:1}
+    .kcard .kcorner button{width:36px;height:36px;font-size:16px} }
   /* CTA under the hero card — a paper button matching the share button, not a bare text link. */
   .ctarow{text-align:center;margin-top:14px}
   .cta-btn{display:inline-block;font-family:var(--hand);font-size:14px;font-weight:800;color:var(--paper3);
@@ -2184,6 +2215,36 @@ function itemBlock(c){
   return `<div class="kitemgrid">${cells}</div>`;
 }
 
+// Genotype panel (solo view only): the decoded appearance genes the portrait is built from —
+// coat-colour row, fur-pattern id, class-accent row, and the per-part variant ids (L/R pairs
+// collapsed when equal). Breeders use matching ids to spot shared genes across cats. Every
+// value is decoded from the save, never inferred; collapsed by default so it never crowds the card.
+function genotypeBlock(c){
+  const g = c && c.genes; if (!g || !g.slots) return '';
+  const s = g.slots;
+  const one = (k, label) => (s[k] != null ? `<span class="gchip"><i>${label}</i>${esc(String(s[k]))}</span>` : '');
+  const pair = (l, r, label) => {
+    if (s[l] == null) return '';
+    const v = (s[r] == null || s[l] === s[r]) ? String(s[l]) : s[l] + '/' + s[r];
+    return `<span class="gchip"><i>${label}</i>${esc(v)}</span>`;
+  };
+  const parts = [
+    one('Body', 'body'), one('Head', 'head'),
+    pair('Ear_L', 'Ear_R', 'ears'), pair('Eye_L', 'Eye_R', 'eyes'),
+    pair('Brow_L', 'Brow_R', 'brows'), one('Mouth', 'mouth'),
+    pair('FrontLeg_L', 'FrontLeg_R', 'front legs'), pair('RearLeg_L', 'RearLeg_R', 'rear legs'),
+    one('Tail', 'tail')
+  ].filter(Boolean).join('');
+  const meta = [];
+  if (g.coatPalette != null) meta.push(`<span class="gchip hl"><i>coat</i>row ${esc(String(g.coatPalette))}</span>`);
+  if (g.pattern != null) meta.push(`<span class="gchip hl"><i>pattern</i>${esc(String(g.pattern))}</span>`);
+  if (g.classPalette != null && g.classPalette >= 0) meta.push(`<span class="gchip hl"><i>accent</i>row ${esc(String(g.classPalette))}</span>`);
+  return `<details class="kgenes"><summary>🧬 genotype <i>(decoded gene ids)</i></summary>` +
+    (meta.length ? `<div class="grow">${meta.join('')}</div>` : '') +
+    `<div class="grow">${parts}</div>` +
+    `<div class="ghint">Part-variant ids from the save's appearance genes — matching ids across cats mean shared genes. Coat &amp; pattern index the game's palette and texture sheets.</div></details>`;
+}
+
 // Size trait badge. The game prefixes tiny cats' display names ("Lil' …" / "Tiny …")
 // but that exact prefix string lives only in compiled game code — not in the save or
 // gpak — so we can't reproduce the precise wording. What we CAN decode is the cause:
@@ -2247,9 +2308,12 @@ function kittenCard(c, big){
   // the grid tab keeps the loaded save). The card body itself is not clickable — text selection
   // and stray clicks stay inert. The button is natively focusable, so keyboard access rides it.
   const openBtn = (!big && c.key != null)
-    ? `<button class="opencard-btn" data-key="${esc(String(c.key))}" title="open ${esc(c.name)}'s card in a new tab" aria-label="open ${esc(c.name)}'s card in a new tab">⧉</button>` +
+    ? `<div class="kcorner">` +
+      `<button class="opencard-btn" data-key="${esc(String(c.key))}" title="open ${esc(c.name)}'s card in a new tab" aria-label="open ${esc(c.name)}'s card in a new tab">⧉</button>` +
+      `<button class="img-btn" data-key="${esc(String(c.key))}" title="save ${esc(c.name)}'s card as a PNG image" aria-label="save ${esc(c.name)}'s card as an image">🖼</button>` +
       `<button class="cmp-btn${__compareSet.has(c.key) ? ' on' : ''}" data-key="${esc(String(c.key))}" title="pick ${esc(c.name)} for side-by-side compare (up to 3)" aria-label="compare ${esc(c.name)}">⚖</button>` +
-      `<button class="star-btn${isStarred(c) ? ' on' : ''}" data-key="${esc(String(c.key))}" title="star ${esc(c.name)} (persists across visits)" aria-label="star ${esc(c.name)}">⭐</button>`
+      `<button class="star-btn${isStarred(c) ? ' on' : ''}" data-key="${esc(String(c.key))}" title="star ${esc(c.name)} (persists across visits)" aria-label="star ${esc(c.name)}">⭐</button>` +
+      `</div>`
     : '';
   return `<div class="kcard${big?' single':''}">
     ${openBtn}
@@ -2264,6 +2328,7 @@ function kittenCard(c, big){
     ${itemBlock(c)}
     ${stats}
     <div class="kportwrap">${mutCounter(c)}<div class="portrait">${portrait}</div></div>
+    ${big ? genotypeBlock(c) : ''}
     ${abils}
     ${(big || c.key == null)?'':`<button class="share-btn" data-key="${esc(String(c.key))}">🔗 Share link</button>`}
     ${approx}
@@ -2283,14 +2348,17 @@ function kittenCard(c, big){
 // gets a Back button that restores the browse grid in place; a RECIPIENT (no save) gets the
 // conversion CTA. Both are paper buttons, not bare text links.
 function shareCTA(){
-  const dl = `<button class="cta-btn alt" onclick="downloadPortraitPng()" title="Save this kitten's portrait as a 1024px PNG">⬇ portrait PNG</button>`;
+  // Card image (portrait + name + class + stat totals) is the primary export; the portrait-only
+  // PNG stays as a secondary option. The card button only appears when we have the cat object.
+  const card = SOLO_CAT ? `<button class="cta-btn alt" onclick="downloadCardImage(SOLO_CAT, this)" title="Save this kitten's full card (portrait + stats) as a PNG">🖼 card image</button> ` : '';
+  const dl = `<button class="cta-btn alt" onclick="downloadPortraitPng()" title="Save just this kitten's portrait as a 1024px PNG">⬇ portrait PNG</button>`;
   // Copy-link only when the page IS a share link (the demo card on the landing page has no
   // #k= URL of its own — copying the bare page URL would be a broken promise).
   const cp = /^#[kt]=/.test(location.hash)
     ? ` <button class="cta-btn alt" onclick="copyShareUrl(this)" title="Copy this kitten's share link">🔗 copy link</button>` : '';
   // Solo views always live in their own save-less tab now (openCard uses window.open), so the
   // CTA is simply the recipient conversion link; a local user just closes the tab.
-  return `<p class="ctarow"><a class="cta-btn" href="${location.pathname}">Open your own save →</a>${cp} ${dl}</p>`;
+  return `<p class="ctarow"><a class="cta-btn" href="${location.pathname}">Open your own save →</a>${cp} ${card}${dl}</p>`;
 }
 // Copy the solo tab's own #k= URL — recipients (and the local user) shouldn't have to fish it
 // out of the address bar. Same never-silent feedback contract as the grid share button.
@@ -2318,8 +2386,10 @@ function showShareView(html){
   // never a broken card.
   const p = kittenCard.pendingIdle;
   kittenCard.pendingIdle = null;
+  SOLO_CAT = p ? p.cat : null;          // remember the cat so the CTA can export its card image
   if (p) attachIdle(sv, p.cat, p.parts);
 }
+let SOLO_CAT = null;
 // TEAM view: 2-3 hero cards side by side from a #t= link. Same pipeline per cat as the single
 // view; each card gets its own idle loop (attachIdle per card root).
 function showTeamView(cats){
@@ -2450,6 +2520,85 @@ function share(key, btn){
 // (paths/gradients/masks, no external refs), so serialize -> Image -> canvas works offline.
 // Portrait only — the full HTML card (border-images, webp icons) can't be rasterized
 // client-side without a rendering library, and a wrong-looking card beats no card never.
+// ---- shareable CARD IMAGE (portrait + name + class + stat totals) -------------------------
+// A purpose-built SVG (not a DOM screenshot), so it's self-contained and rasterizes cleanly to
+// PNG on any card. Everything shown is decoded data: the portrait is the verified puppet, the
+// stat boxes carry the SAME effective totals the card shows (CON exact from HP; the rest base +
+// mutations/items/injuries). Text uses the page's hand-font fallback stack (no web-font to embed).
+const SHARE_FONT = "'Comic Sans MS','Chalkboard SE','Comic Neue',ui-rounded,cursive";
+function buildShareCardSvg(cat){
+  const W = 820, H = 1040, s = cat.stats || {};
+  const dl = statDeltas(cat);
+  const esc2 = esc;
+  // portrait: renderPortrait returns a self-contained <svg viewBox=..>; nest it by injecting a
+  // placement box into its opening tag (its own viewBox handles the scaling).
+  let port = '';
+  try {
+    const raw = renderPortrait(cat);
+    port = raw.replace(/^<svg /, '<svg x="150" y="150" width="520" height="520" preserveAspectRatio="xMidYMid meet" ');
+  } catch (e) { port = ''; }
+  const STATS = ['str','dex','con','int','spd','cha','lck'];
+  const boxes = STATS.filter(k => s[k] != null).map((k, i) => {
+    const base = s[k];
+    const exactCon = (k === 'con') && (exactEffectiveCon(s) != null);
+    const eff = exactCon ? exactEffectiveCon(s) : base + (dl.delta[k] || 0);
+    const d = eff - base;
+    const fill = d > 0 ? '#dcefe2' : (d < 0 ? '#f3dede' : '#fbf6e9');
+    const stroke = d > 0 ? '#4f8a4a' : (d < 0 ? '#a8504a' : '#2b2622');
+    const ink = d > 0 ? '#1b4332' : (d < 0 ? '#7a2020' : '#2b2622');
+    const col = i % 4, row = (i / 4) | 0;
+    const bw = 176, bh = 74, gap = 16, x0 = (W - (4 * bw + 3 * gap)) / 2;
+    const x = x0 + col * (bw + gap), y = 720 + row * (bh + gap);
+    const label = (STAT_LABEL[k] || k).toUpperCase();
+    const sup = d ? `<text x="${x + bw - 12}" y="${y + 24}" font-size="16" fill="${ink}" text-anchor="end" font-family="${SHARE_FONT}">${d > 0 ? '+' + d : d}</text>` : '';
+    return `<rect x="${x}" y="${y}" width="${bw}" height="${bh}" rx="10" fill="${fill}" stroke="${stroke}" stroke-width="2.5"/>` +
+      `<text x="${x + 14}" y="${y + 30}" font-size="17" fill="#5b5449" font-family="${SHARE_FONT}" font-weight="700">${esc2(label)}</text>` +
+      `<text x="${x + 14}" y="${y + 60}" font-size="30" fill="${ink}" font-family="${SHARE_FONT}" font-weight="800">${esc2(String(eff))}</text>` + sup;
+  }).join('');
+  const meta = [cat.cls, cat.gender].filter(Boolean).join('  ·  ');
+  const mutN = (cat.genes && Array.isArray(cat.genes.mutations)) ? cat.genes.mutations.length : 0;
+  const mutLine = mutN ? `${mutN} mutation${mutN > 1 ? 's' : ''}` : 'no mutations';
+  const con = exactEffectiveCon(s);
+  const conNote = con != null ? `   ·   final CON ${con} (from HP)` : '';
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">` +
+    `<rect x="6" y="6" width="${W - 12}" height="${H - 12}" rx="26" fill="#f2ead6" stroke="#2b2622" stroke-width="5"/>` +
+    `<text x="${W / 2}" y="86" font-size="56" fill="#2b2622" text-anchor="middle" font-family="${SHARE_FONT}" font-weight="800">${esc2(cat.name || 'kitten')}</text>` +
+    `<text x="${W / 2}" y="126" font-size="24" fill="#5b5449" text-anchor="middle" font-family="${SHARE_FONT}" font-weight="700">${esc2(meta)}</text>` +
+    port +
+    `<text x="${W / 2}" y="700" font-size="19" fill="#5b5449" text-anchor="middle" font-family="${SHARE_FONT}">${esc2(mutLine)}${esc2(conNote)}</text>` +
+    boxes +
+    `<text x="${W / 2}" y="${H - 26}" font-size="20" fill="#8a7f6a" text-anchor="middle" font-family="${SHARE_FONT}" font-weight="700">🐾 KittenShare</text>` +
+    `</svg>`;
+}
+// Rasterize the share card to a 2x PNG and download it. Never-corrupt: any serialize/taint
+// failure yields no file rather than a broken one, and the button says so.
+async function downloadCardImage(cat, btn){
+  const label = btn ? btn.textContent : null;
+  try {
+    if (btn) btn.textContent = '⏳ rendering…';
+    const svg = buildShareCardSvg(cat);
+    const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+    const scale = 2, W = 820, H = 1040;
+    const canvas = document.createElement('canvas');
+    canvas.width = W * scale; canvas.height = H * scale;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(scale, scale);
+    ctx.drawImage(img, 0, 0, W, H);
+    URL.revokeObjectURL(url);
+    const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+    const a = document.createElement('a');
+    a.download = ((cat.name || 'kitten').replace(/[^\w-]+/g, '_') || 'kitten') + '_card.png';
+    a.href = URL.createObjectURL(blob);
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    if (btn) btn.textContent = '✅ saved!';
+  } catch (e) {
+    if (btn) btn.textContent = '⚠ export failed';
+  }
+  if (btn && label) setTimeout(() => { btn.textContent = label; }, 1600);
+}
 async function downloadPortraitPng(){
   const svg = document.querySelector('#shareView .portrait svg, #demoView .portrait svg');
   if (!svg) return;
@@ -2555,6 +2704,8 @@ document.getElementById('cards').addEventListener('click', e => {
   if (cb) { toggleCompare(Number(cb.dataset.key), cb); return; }
   const sb = e.target.closest('.star-btn');
   if (sb) { toggleStar(Number(sb.dataset.key), sb); return; }
+  const ib = e.target.closest('.img-btn');
+  if (ib) { const c = allCats.find(x => x.key === Number(ib.dataset.key)); if (c) downloadCardImage(c, ib); return; }
   const b = e.target.closest('.share-btn');
   if (b) share(Number(b.dataset.key), b);
 });
@@ -2716,6 +2867,40 @@ function showStorage(){
     <div class="dim" style="margin-top:8px">read from the save's inventory blobs; only items matching the known vocabulary are listed — nothing is guessed</div>`);
 }
 // Roster analytics: censuses over the DECODED fields of the whole roster.
+// Base-stat distribution histograms for the analytics panel. One small chart per core stat:
+// how many cats sit at each base value. Single-series magnitude, so one hue, no legend, a
+// recessive baseline, and a native <title> tooltip per bar. Uses BASE stats (decoded for every
+// cat) so the shape is complete — effective totals are only partial and would bias it.
+function statHistograms(){
+  const ACCENT = '#5f7d46', INK = '#5b5449';
+  let maxV = 1;
+  const data = STAT_KEYS.map(k => {
+    const counts = {};
+    for (const c of allCats) { const v = c.stats && c.stats[k]; if (Number.isInteger(v)) { counts[v] = (counts[v] || 0) + 1; if (v > maxV) maxV = v; } }
+    return { k, counts };
+  });
+  const charts = data.map(({ k, counts }) => {
+    const vals = []; for (let v = 1; v <= maxV; v++) vals.push({ v, n: counts[v] || 0 });
+    const maxN = Math.max(1, ...vals.map(o => o.n));
+    const W = 210, H = 116, padL = 6, padR = 6, padB = 18, padT = 14;
+    const plotW = W - padL - padR, plotH = H - padT - padB, bw = plotW / vals.length;
+    const mode = vals.reduce((a, b) => b.n > a.n ? b : a, vals[0]);
+    const bars = vals.map(({ v, n }, i) => {
+      const h = n ? Math.max(2, (n / maxN) * plotH) : 0;
+      const x = padL + i * bw, y = padT + plotH - h;
+      // Selective ticks only (first, last, mode) — never a label on every bar.
+      const tick = (v === 1 || v === maxV || v === mode.v)
+        ? `<text x="${(x + bw / 2).toFixed(1)}" y="${H - 5}" font-size="8" fill="${INK}" text-anchor="middle">${v}</text>` : '';
+      return `<rect x="${(x + 1).toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1, bw - 2).toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${ACCENT}"><title>${esc(STAT_LABEL[k] || k)} ${v}: ${n} cat${n === 1 ? '' : 's'}</title></rect>${tick}`;
+    }).join('');
+    const modeLbl = mode.n ? `<text x="${(padL + (vals.indexOf(mode) + 0.5) * bw).toFixed(1)}" y="${(padT + plotH - (mode.n / maxN) * plotH - 3).toFixed(1)}" font-size="8.5" fill="${INK}" text-anchor="middle" font-weight="700">${mode.n}</text>` : '';
+    return `<div class="histcell"><div class="histh">${esc(STAT_LABEL[k] || k.toUpperCase())}</div>` +
+      `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(STAT_LABEL[k] || k)} base-stat distribution across the roster">` +
+      `<line x1="${padL}" y1="${padT + plotH}" x2="${W - padR}" y2="${padT + plotH}" stroke="#d8cfb8" stroke-width="1"/>` +
+      bars + modeLbl + `</svg></div>`;
+  }).join('');
+  return `<h3>base-stat distribution <span class="dim" style="font-weight:400">(all ${allCats.length} cats · decoded base values · hover a bar for the count)</span></h3><div class="histgrid">${charts}</div>`;
+}
 function showAnalytics(){
   if (!allCats.length) return;
   const total = allCats.length;
@@ -2763,6 +2948,7 @@ function showAnalytics(){
   openOverlay(`<h2>📊 roster stats</h2>
     <div>${total} cats · ${inHouse} in the house · ${dead} dead · ${injured} injured · ${mutants} mutants · ${cloneCats} in clone groups</div>
     <h3>best base stat in the roster</h3><table>${bests}</table>
+    ${statHistograms()}
     ${unlockHtml}
     <h3>classes</h3><table>${classes}</table>
     <h3>top 10 mutations</h3><table>${muts}</table>
