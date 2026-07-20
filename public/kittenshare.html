@@ -457,22 +457,13 @@
     border:2px solid var(--ink);border-radius:7px 5px 6px 5px/5px 6px 5px 7px;cursor:pointer;
     box-shadow:1px 1px 0 rgba(43,38,34,.2);padding:0}
   .opencard-btn:hover{background:var(--paper2)}
-  /* Corner toolbar: groups the per-card action buttons into one row that sits quietly at ~half
-     opacity and comes forward on hover/focus, so a wall of cards doesn't read as a wall of
-     buttons. Positioning is reset here; each button keeps its own look + state styles. */
-  .kcard .kcorner{position:absolute;top:-8px;right:-6px;z-index:8;display:flex;gap:4px;
-    opacity:.5;transition:opacity .14s}
-  .kcard:hover .kcorner,.kcard:focus-within .kcorner{opacity:1}
-  .kcard .kcorner .opencard-btn,.kcard .kcorner .cmp-btn,
-  .kcard .kcorner .star-btn,.kcard .kcorner .img-btn{position:static;top:auto;right:auto}
-  /* 🖼 save-image button — same paper chip as its siblings. */
-  .img-btn{position:absolute;z-index:7;width:26px;height:26px;font-size:13px;line-height:1;
+  /* 🖼 save-image button — a paper chip sitting left of the ⭐ star in the corner row. */
+  .img-btn{position:absolute;top:-6px;right:86px;z-index:7;width:26px;height:26px;font-size:13px;line-height:1;
     color:var(--ink);background:var(--paper3);border:2px solid var(--ink);
     border-radius:7px 5px 6px 5px/5px 6px 5px 7px;cursor:pointer;
     box-shadow:1px 1px 0 rgba(43,38,34,.2);padding:0}
   .img-btn:hover{background:var(--paper2)}
-  @media (pointer:coarse){ .kcard .kcorner{opacity:1}
-    .kcard .kcorner button{width:36px;height:36px;font-size:16px} }
+  @media (pointer:coarse){ .img-btn{width:36px;height:36px;font-size:16px;right:120px;top:-8px} }
   /* CTA under the hero card — a paper button matching the share button, not a bare text link. */
   .ctarow{text-align:center;margin-top:14px}
   .cta-btn{display:inline-block;font-family:var(--hand);font-size:14px;font-weight:800;color:var(--paper3);
@@ -2308,12 +2299,10 @@ function kittenCard(c, big){
   // the grid tab keeps the loaded save). The card body itself is not clickable — text selection
   // and stray clicks stay inert. The button is natively focusable, so keyboard access rides it.
   const openBtn = (!big && c.key != null)
-    ? `<div class="kcorner">` +
-      `<button class="opencard-btn" data-key="${esc(String(c.key))}" title="open ${esc(c.name)}'s card in a new tab" aria-label="open ${esc(c.name)}'s card in a new tab">⧉</button>` +
+    ? `<button class="opencard-btn" data-key="${esc(String(c.key))}" title="open ${esc(c.name)}'s card in a new tab" aria-label="open ${esc(c.name)}'s card in a new tab">⧉</button>` +
       `<button class="img-btn" data-key="${esc(String(c.key))}" title="save ${esc(c.name)}'s card as a PNG image" aria-label="save ${esc(c.name)}'s card as an image">🖼</button>` +
       `<button class="cmp-btn${__compareSet.has(c.key) ? ' on' : ''}" data-key="${esc(String(c.key))}" title="pick ${esc(c.name)} for side-by-side compare (up to 3)" aria-label="compare ${esc(c.name)}">⚖</button>` +
-      `<button class="star-btn${isStarred(c) ? ' on' : ''}" data-key="${esc(String(c.key))}" title="star ${esc(c.name)} (persists across visits)" aria-label="star ${esc(c.name)}">⭐</button>` +
-      `</div>`
+      `<button class="star-btn${isStarred(c) ? ' on' : ''}" data-key="${esc(String(c.key))}" title="star ${esc(c.name)} (persists across visits)" aria-label="star ${esc(c.name)}">⭐</button>`
     : '';
   return `<div class="kcard${big?' single':''}">
     ${openBtn}
